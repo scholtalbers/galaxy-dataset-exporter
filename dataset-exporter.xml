@@ -1,0 +1,79 @@
+<tool id="dataset-exporter" name="Dataset Exporter" version="0.1.0">
+    <requirements>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+        python '$__tool_directory__/dataset_export.py'
+            ##--email '$__user_email__'
+            --email jelle.scholtalbers@embl.de
+            #for $d in $datasets
+                #set tags = ','.join(str(t.value) for t in $d.tags)
+                --dataset '${d}'
+                --dataset_name '${d.element_identifier}'
+                --dataset_extension '${d.ext}'
+                --dataset_tags '${tags}'
+                --history_id '${d.hid}'
+                --history_name '${d.dataset.history.name}'
+            #end for
+
+            #if str( $options.selection_mode ) == "defaults":
+                --file_pattern '${options.predefined_file_pattern}'
+            #else:
+                --file_pattern '${options.file_pattern}'
+            #end if
+        > '$log'
+    ]]></command>
+    <inputs>
+        <param name="datasets" type="data" format="data" multiple="true" label="Datasets to export" />
+        <conditional name="options">
+            <param label="Use advanced options" name="selection_mode" type="select">
+              <option selected="true" value="defaults">Use default options</option>
+              <option value="advanced">Use advanced options</option>
+            </param>
+            <when value="defaults">
+                <param name="predefined_file_pattern" type="select" label="Predefined locations (see below for the patterns used)"
+                       help='Use "Scratch" if you know how to use the commandline.
+                       Use the "Group Share" if you want to browse the files from your desktop.'>
+                    <option value="/scratch/{username}/galaxy_transfer/{history}/{name}.{ext}" selected="true">Scratch</option>
+                    <option value="/g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}">Group Share</option>
+                    <option value="/g/aulehla/WaveletMovieBatchG/{username}/{name}.{ext}">Aulehla WaveletMovies</option>
+				</param>
+
+            </when>
+            <when value="advanced">
+                <param name="file_pattern" type="text" label="File pattern (see below for placeholders}"
+                       help="Where the file needs to placed and how the name should be constructed."
+                       value="/scratch/{username}/{history}/{basename}_{tags}.{ext}">
+                            <validator type="empty_field" />
+                            <sanitizer sanitize="false" />
+                            <!--<validator type="regex" message="Have to start from /scratch/ or /g/">^/[scratch|g]/.+</validator>-->
+                </param>
+            </when>
+        </conditional>
+    </inputs>
+    <outputs>
+        <data name="log" format="txt" />
+    </outputs>
+    <help><![CDATA[
+
+        **Predefined locations**:
+            - Scratch: /scratch/{username}/galaxy_transfer/{history}/{name}.{ext}
+            - Group Share: /g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}
+            - WaveletMovies: **only for Aulehla users**
+
+        **File Pattern** Available placeholders are:
+
+            - {username}: your username
+            - {email}: your email address
+            - {group}: your **primary** unix group
+            - {id}: Dataset id
+            - {name}: Dataset name
+            - {ext}: Dataset extension (e.g. bam, fa)
+            - {history}: history name
+            - {tags}: all tags on the dataset seperated by a dash e.g. myfasta_tag1-tag2.fa
+            - {hid}: Galaxy history id
+
+            E.g. "/g/{group}/{username}/{history}/{name}_{tags}.{ext}" will become: "/g/gbcs/scholtal/My_History/myfasta_tag1-tag2.fa"
+
+        **Note:** File paths cannot contain any whitespaces, they will be converted to underscores(_)
+    ]]></help>
+</tool>
