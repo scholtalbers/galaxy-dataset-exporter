@@ -158,6 +158,8 @@ def user_can_write_dir(directory, username, group_ids):
     pwd_user = pwd.getpwnam(username)
     stat_info = os.stat(directory)
     logger.debug("Got directory ('%s') permissions: %s", directory, stat_info)
+    logger.debug("owned by group: %s", stat_info.st_gid)
+    logger.debug("writable by group: %s", stat_info.st_mode & stat.S_IWGRP)
     return (
             ((stat_info.st_uid == pwd_user.pw_uid) and (stat_info.st_mode & stat.S_IWUSR)) or
             ((stat_info.st_gid in group_ids and (stat_info.st_mode & stat.S_IWGRP)) or
