@@ -36,6 +36,7 @@
                     <option value="/scratch/{username}/galaxy_transfer/{history}/{name}.{ext}" selected="true">Scratch</option>
                     <option value="/g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}">Group Share</option>
                     <option value="/g/aulehla/WaveletMovieBatchG/{username}/{name}.{ext}">Aulehla WaveletMovies</option>
+                    <sanitizer sanitize="false" />
 				</param>
 
             </when>

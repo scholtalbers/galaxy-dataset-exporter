@@ -61,7 +61,8 @@ def main():
         username = resolve_username(args.email)
         logger.debug("Found username: '%s'", username)
         primary_group, groups, group_ids = resolve_groups(username)
-        logger.debug("Found primary group: '%s' and groups: '%s'", primary_group, groups)
+        logger.debug("Found primary group: '%s', group names: '%s' and ids: '%s'",
+                     primary_group, ", ".join(groups), ", ".join(group_ids))
     except KeyError as e:
         logger.exception(e)
         logger.critical("Cannot find unix username by '%s'. Please contact your Galaxy administrator.", args.email)
@@ -192,6 +193,7 @@ def get_valid_filename(filename):
 
 
 def resolve_path(file_pattern, file_pattern_map):
+    logger.info("Got file pattern: %s", file_pattern)
     pattern_found = None
     for pattern in REQUIRED_PATH_PATTERNS:
         if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
