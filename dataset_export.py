@@ -102,12 +102,13 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
         new_path, pattern_found = resolve_path(args.file_pattern, file_pattern_map)
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
-                            "(re)move the existing file.")
+                            "(re)move the existing file.", new_path)
             sys.exit(1)
         if create_path(new_path, pattern_found, username, group_ids):
             try:
                 # do the actual copy
                 shutil.copy2(dataset, new_path)
+                set_permission(new_path)
                 logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
             except OSError as e:
                 if e.errno == 13:
@@ -124,6 +125,14 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
         else:
             logger.critical("You do not have permission or the directory does not exists yet.")
             sys.exit(1)
+
+
+def set_permission(filepath, mode=0o777):
+    try:
+        os.chmod(filepath, mode)
+    except Exception as e:
+        logger.error("Failed to set permissions on file '%s'" % filepath)
+        logger.debug(e)
 
 
 def resolve_username(email):
