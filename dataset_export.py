@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--file_pattern")
     parser.add_argument("--email")
     parser.add_argument("--loglevel", default="DEBUG")
+    parser.add_argument("--log", default=None)
 
     # permission related settings
     parser.add_argument("--check-user-permissions", dest="check_user_permissions",
@@ -56,8 +57,16 @@ def main():
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.loglevel.upper()),
+    loglevel = getattr(logging, args.loglevel.upper())
+    logging.basicConfig(level=loglevel,
                         format="%(levelname)s: %(message)s")
+
+    if args.log:
+        ch = logging.FileHandler(filename=args.log)
+        ch.setLevel(loglevel)
+        formatter = logging.Formatter("%(levelname)s: %(message)s")
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
 
     try:
         username = resolve_username(args.email)
@@ -100,7 +109,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                 shutil.copy2(dataset, new_path)
                 logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
             except OSError as e:
-                if e.errno == "13":
+                if e.errno == 13:
                     logger.critical("Galaxy cannot copy the file to the destination path. Please make sure the galaxy "
                                     "user has write permission on the given path. "
                                     "`chmod g+w %s` might just do the trick.", os.path.dirname(new_path))
@@ -189,7 +198,7 @@ def create_path(path, pattern_found, username, group_ids):
         try:
             os.makedirs(path)
         except OSError as e:
-            if e.errno == "13":
+            if e.errno == 13:
                 logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
                                 "write permission on the given path. `chmod g+w %s` might just do the trick.",
                                 path)

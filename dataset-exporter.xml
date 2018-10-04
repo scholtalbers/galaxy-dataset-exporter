@@ -20,7 +20,7 @@
             #else:
                 --file_pattern '${options.file_pattern}'
             #end if
-        > '$log'
+            --log '$log'
     ]]></command>
     <inputs>
         <param name="datasets" type="data" format="data" multiple="true" label="Datasets to export" />
