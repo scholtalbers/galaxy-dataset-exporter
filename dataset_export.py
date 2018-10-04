@@ -31,6 +31,7 @@ REQUIRED_PATH_PATTERNS=[
     "/tmp/{username}",
     "/tmp/test/",
     "/scratch/{username}/", "/g/{group}/galaxy_transfer/", "/g/aulelha/WaveletMovieBatchG/",
+    "/g/funcgen/galaxy_transfer/"
 ]
 
 
@@ -239,7 +240,7 @@ def resolve_path(file_pattern, file_pattern_map):
         if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
             pattern_found = pattern
     if not pattern_found:
-        logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group} or /scratch/{username}.")
+        logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group}/galaxy_transfer/ or /scratch/{username}.")
         sys.exit(1)
 
     try:
