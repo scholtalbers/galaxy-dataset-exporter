@@ -103,6 +103,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
                             "(re)move the existing file.")
+            sys.exit(1)
         if create_path(new_path, pattern_found, username, group_ids):
             try:
                 # do the actual copy
