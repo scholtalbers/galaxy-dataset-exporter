@@ -109,7 +109,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
         if create_path(new_path, pattern_found, username, group_ids):
             try:
                 # do the actual copy
-                shutil.copy2(dataset, new_path)
+                shutil.copyfile(dataset, new_path)
                 logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
             except OSError as e:
                 if e.errno == 13:
