@@ -79,6 +79,8 @@ def main():
         logger.critical("Cannot find unix username by '%s'. Please contact your Galaxy administrator.", args.email)
         sys.exit(1)
 
+    # ignore umask - we want 0o777
+    os.umask(0)
     copy_datasets(args, username, primary_group, groups, group_ids)
 
 
@@ -108,7 +110,6 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             try:
                 # do the actual copy
                 shutil.copy2(dataset, new_path)
-                set_permission(new_path)
                 logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
             except OSError as e:
                 if e.errno == 13:
@@ -125,14 +126,6 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
         else:
             logger.critical("You do not have permission or the directory does not exists yet.")
             sys.exit(1)
-
-
-def set_permission(filepath, mode=0o777):
-    try:
-        os.chmod(filepath, mode)
-    except Exception as e:
-        logger.error("Failed to set permissions on file '%s'" % filepath)
-        logger.debug(e)
 
 
 def resolve_username(email):
@@ -163,7 +156,7 @@ def resolve_groups(username):
 def user_can_write_dir(directory, username, group_ids):
     pwd_user = pwd.getpwnam(username)
     stat_info = os.stat(directory)
-    logger.debug("Got directory permissions: %s", stat_info)
+    logger.debug("Got directory ('%s') permissions: %s", directory, stat_info)
     return (
             ((stat_info.st_uid == pwd_user.pw_uid) and (stat_info.st_mode & stat.S_IWUSR)) or
             ((stat_info.st_gid in group_ids and (stat_info.st_mode & stat.S_IWGRP)) or
