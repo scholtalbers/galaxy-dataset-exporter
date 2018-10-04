@@ -10,7 +10,8 @@ import sys
 
 import pwd
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
+
 
 # Command to that takes an email address as a single argument and returns the unix username.
 script_path = os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -55,7 +56,8 @@ def main():
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.loglevel.upper()))
+    logging.basicConfig(level=getattr(logging, args.loglevel.upper()),
+                        format="%(levelname)s: %(message)s")
 
     try:
         username = resolve_username(args.email)
@@ -89,6 +91,9 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "tags": "_".join(args.dataset_tags)
         }
         new_path, pattern_found = resolve_path(args.file_pattern, file_pattern_map)
+        if os.path.exists(new_path):
+            logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
+                            "(re)move the existing file.")
         if create_path(new_path, pattern_found, username, group_ids):
             try:
                 # do the actual copy
@@ -120,7 +125,11 @@ def run_command(command_list, format_dict, msg):
     for cmd_part in command_list:
         cmd.append(cmd_part.format(**format_dict))
     logger.debug(msg, cmd)
-    return subprocess.check_output(cmd).strip()
+    try:
+        return subprocess.check_output(cmd).strip()
+    except subprocess.CalledProcessError as e:
+        logger.critical(e)
+        sys.exit(1)
 
 
 def resolve_groups(username):
@@ -135,7 +144,7 @@ def resolve_groups(username):
 def user_can_write_dir(directory, username, group_ids):
     pwd_user = pwd.getpwnam(username)
     stat_info = os.stat(directory)
-    logger.critical("Got directory permissions: %s", stat_info)
+    logger.debug("Got directory permissions: %s", stat_info)
     return (
             ((stat_info.st_uid == pwd_user.pw_uid) and (stat_info.st_mode & stat.S_IWUSR)) or
             ((stat_info.st_gid in group_ids and (stat_info.st_mode & stat.S_IWGRP)) or
