@@ -195,16 +195,18 @@ def create_path(path, pattern_found, username, group_ids):
     """
     Create path and check permissions
     """
-    dir_exists = os.path.exists(os.path.dirname(path))
-    can_write = check_permission(path, pattern_found, username, group_ids)
+    directory_path = os.path.dirname(path)
+    dir_exists = os.path.exists(directory_path)
+    can_write = check_permission(directory_path, pattern_found, username, group_ids)
     if can_write and not dir_exists:
         try:
-            os.makedirs(path)
+            logger.info("Creating directory: '%s'", directory_path)
+            os.makedirs(directory_path)
         except OSError as e:
             if e.errno == 13:
                 logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
                                 "write permission on the given path. `chmod g+w %s` might just do the trick.",
-                                path)
+                                directory_path)
             else:
                 logger.critical(e)
             sys.exit(1)
