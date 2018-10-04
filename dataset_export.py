@@ -94,6 +94,14 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                 # do the actual copy
                 shutil.copy2(dataset, new_path)
                 logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+            except OSError as e:
+                if e.errno == "13":
+                    logger.critical("Galaxy cannot copy the file to the destination path. Please make sure the galaxy "
+                                    "user has write permission on the given path. "
+                                    "`chmod g+w %s` might just do the trick.", os.path.dirname(new_path))
+                else:
+                    logger.critical(e)
+                sys.exit(1)
             except Exception as e:
                 logger.exception(e)
                 logger.critical("Cannot copy file '%s' -> '%s'.", dataset, new_path)
@@ -169,7 +177,16 @@ def create_path(path, pattern_found, username, group_ids):
     dir_exists = os.path.exists(os.path.dirname(path))
     can_write = check_permission(path, pattern_found, username, group_ids)
     if can_write and not dir_exists:
-        os.makedirs(path)
+        try:
+            os.makedirs(path)
+        except OSError as e:
+            if e.errno == "13":
+                logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
+                                "write permission on the given path. `chmod g+w %s` might just do the trick.",
+                                path)
+            else:
+                logger.critical(e)
+            sys.exit(1)
     return can_write
 
 
