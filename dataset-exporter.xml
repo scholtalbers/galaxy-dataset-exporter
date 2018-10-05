@@ -3,8 +3,7 @@
     </requirements>
     <command detect_errors="exit_code"><![CDATA[
         python '$__tool_directory__/dataset_export.py'
-            ##--email '$__user_email__'
-            --email jelle.scholtalbers@embl.de
+            --email '$__user_email__'
             #for $d in $datasets
                 #set tags = ','.join(str(t.value) for t in $d.tags)
                 --dataset '${d}'
