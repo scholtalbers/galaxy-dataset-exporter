@@ -74,7 +74,7 @@ def main():
         logger.debug("Found username: '%s'", username)
         primary_group, groups, group_ids = resolve_groups(username)
         logger.debug("Found primary group: '%s', group names: '%s' and ids: '%s'",
-                     primary_group, ", ".join(groups), ", ".join(group_ids))
+                     primary_group, ", ".join(groups), ", ".join(map(str, group_ids)))
     except KeyError as e:
         logger.exception(e)
         logger.critical("Cannot find unix username by '%s'. Please contact your Galaxy administrator.", args.email)
@@ -150,21 +150,23 @@ def resolve_groups(username):
     groups_out = run_command(GROUPS_COMMAND, {"username": username}, "Getting groups with: '%s'")
     groups = groups_out.split(" ")
     group_ids_out = run_command(GROUP_IDS_COMMAND, {"username": username}, "Getting group ids with '%s'")
-    group_ids = group_ids_out.split(" ")
+    group_ids = map(int, group_ids_out.split(" "))
     return primary_group, groups, group_ids
 
 
 def user_can_write_dir(directory, username, group_ids):
     pwd_user = pwd.getpwnam(username)
     stat_info = os.stat(directory)
-    logger.debug("Got directory ('%s') permissions: %s", directory, stat_info)
-    logger.debug("owned by group: %s", stat_info.st_gid)
-    logger.debug("writable by group: %s", stat_info.st_mode & stat.S_IWGRP)
-    return (
-            ((stat_info.st_uid == pwd_user.pw_uid) and (stat_info.st_mode & stat.S_IWUSR)) or
-            ((stat_info.st_gid in group_ids and (stat_info.st_mode & stat.S_IWGRP)) or
-            (stat_info.st_mode & stat.S_IWOTH))
-    )
+    logger.debug("Directory '%s' permissions: '%s' (%s)", directory, oct(stat_info.st_mode), stat_info.st_mode)
+    logger.debug("Directory owned by user id: %s", stat_info.st_uid)
+    logger.debug("Directory owned by group: %s", stat_info.st_gid)
+    logger.debug("Directory group id in user group ids: %s", stat_info.st_gid in group_ids)
+    logger.debug("Directory writable by owner: %s", stat_info.st_mode & stat.S_IWUSR)
+    logger.debug("Directory writable by group: %s", stat_info.st_mode & stat.S_IWGRP)
+    logger.debug("Directory writable by others: %s", stat_info.st_mode & stat.S_IWOTH)
+    return (stat_info.st_uid == pwd_user.pw_uid and stat_info.st_mode & stat.S_IWUSR) or \
+           (stat_info.st_gid in group_ids and stat_info.st_mode & stat.S_IWGRP) or \
+           (stat_info.st_mode & stat.S_IWOTH)
 
 
 def check_permission(path, pattern_found, username, group_ids):
@@ -180,15 +182,20 @@ def check_permission(path, pattern_found, username, group_ids):
     If /g/furlong/scholtal is also not existing, the user needs to have write permissions on /g/furlong
     as that is the value of `pattern_found`
     """
+    logger.info("Checking directory: %s", path)
     if os.path.exists(path):
-        if user_can_write_dir(path, username, group_ids):
+        user_can_write_dir_out = user_can_write_dir(path, username, group_ids)
+        logger.info("Permission check out: %s", user_can_write_dir_out)
+        if user_can_write_dir_out:
+            logger.info("Directory is writable by the user.")
             return True
         else:
+            logger.info("Directory is not writable by the user.")
             return False
     elif path == pattern_found:
         # the root directory - i.e. the required pattern does not exist yet, we will not create this
         return False
-
+    logger.debug("Path not yet existing: '%s'", path)
     # if not yet existing, then check the parent directory till we find an existing one
     parent_directory = os.path.dirname(path)
     return check_permission(parent_directory, pattern_found, username, group_ids)
