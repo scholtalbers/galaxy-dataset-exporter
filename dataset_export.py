@@ -30,8 +30,8 @@ PRIMARY_GROUP_COMMAND=["id", "-gn", "{username}"]
 REQUIRED_PATH_PATTERNS=[
     "/tmp/{username}",
     "/tmp/test/",
-    "/scratch/{username}/", "/g/{group}/galaxy_transfer/", "/g/aulelha/WaveletMovieBatchG/",
-    "/g/funcgen/galaxy_transfer/"
+    "/scratch/{username}/", "/g/{group}/", "/g/aulelha/WaveletMovieBatchG/",
+    "/g/funcgen/"
 ]
 
 
@@ -112,7 +112,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                 # do the actual copy
                 shutil.copyfile(dataset, new_path)
                 logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
-            except OSError as e:
+            except (IOError, OSError) as e:
                 if e.errno == 13:
                     logger.critical("Galaxy cannot copy the file to the destination path. Please make sure the galaxy "
                                     "user has write permission on the given path. "
@@ -214,7 +214,7 @@ def create_path(path, pattern_found, username, group_ids):
             os.makedirs(directory_path)
         except OSError as e:
             if e.errno == 13:
-                logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
+                logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has "
                                 "write permission on the given path. `chmod g+w %s` might just do the trick.",
                                 directory_path)
             else:
@@ -249,7 +249,7 @@ def resolve_path(file_pattern, file_pattern_map):
         if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
             pattern_found = pattern
     if not pattern_found:
-        logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group}/galaxy_transfer/ or /scratch/{username}.")
+        logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group}/ or /scratch/{username}/.")
         sys.exit(1)
 
     try:
