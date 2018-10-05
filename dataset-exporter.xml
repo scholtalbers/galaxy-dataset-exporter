@@ -1,4 +1,5 @@
 <tool id="dataset-exporter" name="Dataset Exporter" version="0.1.0">
+    <description>- transfer datasets to the network shares</description>
     <requirements>
     </requirements>
     <command detect_errors="exit_code"><![CDATA[
