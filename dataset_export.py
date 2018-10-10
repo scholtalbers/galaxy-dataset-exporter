@@ -7,8 +7,10 @@ import shutil
 import stat
 import subprocess
 import sys
-
+import yaml
 import pwd
+
+from yaml.scanner import ScannerError
 
 logger = logging.getLogger()
 
@@ -24,20 +26,17 @@ GROUP_IDS_COMMAND=["id", "-G", "{username}"]
 # Command that takes a username as a single argument and returns the primary group"
 PRIMARY_GROUP_COMMAND=["id", "-gn", "{username}"]
 
-
-# The required file patterns. For permission checking, the user need to have write permissions to at
-# least this path if the path is not yet existing.
-REQUIRED_PATH_PATTERNS=[
-    "/tmp/{username}",
-    "/tmp/test/",
-    "/scratch/{username}/", "/g/{group}/galaxy_transfer/", "/g/aulelha/WaveletMovieBatchG/",
-    "/g/funcgen/galaxy_transfer/"
-]
-
+with open(os.path.join(script_path, "config.yaml")) as c:
+    try:
+        config = yaml.load(c)
+    except ScannerError:
+        logger.exception("Config yaml file incorrect.")
+        sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(
         description="Input/Output")
+    parser.add_argument("--dry_run", action="store_true", default=False, type=bool)
 
     parser.add_argument("--dataset", action="append")
     parser.add_argument("--dataset_name", action="append")
@@ -68,6 +67,9 @@ def main():
         formatter = logging.Formatter("%(levelname)s: %(message)s")
         ch.setFormatter(formatter)
         logger.addHandler(ch)
+
+    if args.dry_run:
+        logger.info("Dry run activated - not copying any files!")
 
     try:
         username = resolve_username(args.email)
@@ -102,28 +104,31 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "hid": args.history_id[i],
             "tags": "_".join(args.dataset_tags)
         }
-        new_path, pattern_found = resolve_path(args.file_pattern, file_pattern_map)
+        new_path, pattern_found = resolve_path(args.file_pattern, file_pattern_map, args.email)
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
                             "(re)move the existing file.", new_path)
             sys.exit(1)
-        if create_path(new_path, pattern_found, username, group_ids):
-            try:
-                # do the actual copy
-                shutil.copyfile(dataset, new_path)
-                logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
-            except OSError as e:
-                if e.errno == 13:
-                    logger.critical("Galaxy cannot copy the file to the destination path. Please make sure the galaxy "
-                                    "user has write permission on the given path. "
-                                    "`chmod g+w %s` might just do the trick.", os.path.dirname(new_path))
-                else:
-                    logger.critical(e)
-                sys.exit(1)
-            except Exception as e:
-                logger.exception(e)
-                logger.critical("Cannot copy file '%s' -> '%s'.", dataset, new_path)
-                sys.exit(1)
+        if create_path(args, new_path, pattern_found, username, group_ids):
+            if args.dry_run:
+                logger.debug("Would have copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+            else:
+                try:
+                    # do the actual copy
+                    shutil.copyfile(dataset, new_path)
+                    logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+                except OSError as e:
+                    if e.errno == 13:
+                        logger.critical("Galaxy cannot copy the file to the destination path. Please make sure the galaxy "
+                                        "user has write permission on the given path. "
+                                        "`chmod g+w %s` might just do the trick.", os.path.dirname(new_path))
+                    else:
+                        logger.critical(e)
+                    sys.exit(1)
+                except Exception as e:
+                    logger.exception(e)
+                    logger.critical("Cannot copy file '%s' -> '%s'.", dataset, new_path)
+                    sys.exit(1)
         else:
             logger.critical("You do not have permission or the directory does not exists yet.")
             sys.exit(1)
@@ -171,7 +176,8 @@ def user_can_write_dir(directory, username, group_ids):
 
 def check_permission(path, pattern_found, username, group_ids):
     """
-    The REQUIRED_PATH_PATTERNS specify the directory that the user needs to have at least write
+
+    The config['required_path_patterns'] specify the directory that the user needs to have at least write
     permission for. `pattern_found` holds the required pattern that was found when resolving the path.
     If the rest of the path is not existing, this will be allowed.
     If the path is already existing we check those permissions.
@@ -192,8 +198,9 @@ def check_permission(path, pattern_found, username, group_ids):
         else:
             logger.info("Directory is not writable by the user.")
             return False
-    elif path == pattern_found:
+    elif os.path.normpath(path) == os.path.normpath(pattern_found):
         # the root directory - i.e. the required pattern does not exist yet, we will not create this
+        logger.debug("Maximum parent reached, will not traverse further.")
         return False
     logger.debug("Path not yet existing: '%s'", path)
     # if not yet existing, then check the parent directory till we find an existing one
@@ -201,7 +208,7 @@ def check_permission(path, pattern_found, username, group_ids):
     return check_permission(parent_directory, pattern_found, username, group_ids)
 
 
-def create_path(path, pattern_found, username, group_ids):
+def create_path(args, path, pattern_found, username, group_ids):
     """
     Create path and check permissions
     """
@@ -209,17 +216,20 @@ def create_path(path, pattern_found, username, group_ids):
     dir_exists = os.path.exists(directory_path)
     can_write = check_permission(directory_path, pattern_found, username, group_ids)
     if can_write and not dir_exists:
-        try:
-            logger.info("Creating directory: '%s'", directory_path)
-            os.makedirs(directory_path)
-        except OSError as e:
-            if e.errno == 13:
-                logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
-                                "write permission on the given path. `chmod g+w %s` might just do the trick.",
-                                directory_path)
-            else:
-                logger.critical(e)
-            sys.exit(1)
+        if args.dry_run:
+            logger.info("Would have created directory: '%s'", directory_path)
+        else:
+            try:
+                logger.info("Creating directory: '%s'", directory_path)
+                os.makedirs(directory_path)
+            except OSError as e:
+                if e.errno == 13:
+                    logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
+                                    "write permission on the given path. `chmod g+w %s` might just do the trick.",
+                                    directory_path)
+                else:
+                    logger.critical(e)
+                sys.exit(1)
     return can_write
 
 
@@ -242,15 +252,16 @@ def get_valid_filename(filename):
     return re.sub(r'(?u)[^-\w.]', '', filename)
 
 
-def resolve_path(file_pattern, file_pattern_map):
+def resolve_path(file_pattern, file_pattern_map, email):
     logger.info("Got file pattern: %s", file_pattern)
     pattern_found = None
-    for pattern in REQUIRED_PATH_PATTERNS:
-        if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
-            pattern_found = pattern
-    if not pattern_found:
-        logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group}/galaxy_transfer/ or /scratch/{username}.")
-        sys.exit(1)
+    if email not in config["superusers"]:
+        for pattern in config["required_path_patterns"]:
+            if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
+                pattern_found = pattern
+        if not pattern_found:
+            logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group}/galaxy_transfer/ or /scratch/{username}.")
+            sys.exit(1)
 
     try:
         new_path_mapped = file_pattern.format(**file_pattern_map)
@@ -263,9 +274,9 @@ def resolve_path(file_pattern, file_pattern_map):
     logger.debug("Make given file path '%s' valid", new_path_mapped)
     new_path_mapped = get_valid_filepath(new_path_mapped)
 
-    logger.debug("Constructed new_path: '%s'", new_path_mapped)
+    logger.debug("Constructed new path: '%s'", new_path_mapped)
     new_path = os.path.realpath(new_path_mapped)
-    logger.debug("Resolved new_path: '%s'", new_path_mapped)
+    logger.info("Resolved new path: '%s'", new_path_mapped)
     return new_path, pattern_found
 
 if __name__ == "__main__":

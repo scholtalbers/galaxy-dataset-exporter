@@ -1,0 +1,13 @@
+required_path_patterns:
+  # predefined and custom paths need to follow these patterns
+  - "/tmp/{username}"
+  - "/tmp/test/"
+  - "/scratch/{username}/"
+  - "/g/{group}/galaxy_transfer/"
+  - "/g/aulelha/WaveletMovieBatchG/"
+  - "/g/funcgen/galaxy_transfer/"
+superusers:
+  # for these users the path pattern will not! be checked
+  # permissions are always checked
+  - jelle.scholtalbers@embl.de
+  - girardot@embl.de

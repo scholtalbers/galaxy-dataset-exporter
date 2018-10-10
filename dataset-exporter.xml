@@ -1,6 +1,9 @@
 <tool id="dataset-exporter" name="Dataset Exporter" version="0.1.0">
     <requirements>
     </requirements>
+    <macros>
+        <import>predefined_export_paths.xml</import>
+    </macros>
     <command detect_errors="exit_code"><![CDATA[
         python '$__tool_directory__/dataset_export.py'
             --email '$__user_email__'
@@ -29,15 +32,7 @@
               <option value="advanced">Use advanced options</option>
             </param>
             <when value="defaults">
-                <param name="predefined_file_pattern" type="select" label="Predefined locations (see below for the patterns used)"
-                       help='Use "Scratch" if you know how to use the commandline.
-                       Use the "Group Share" if you want to browse the files from your desktop.'>
-                    <option value="/scratch/{username}/galaxy_transfer/{history}/{name}.{ext}" selected="true">Scratch</option>
-                    <option value="/g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}">Group Share</option>
-                    <option value="/g/aulehla/WaveletMovieBatchG/{username}/{name}.{ext}">Aulehla WaveletMovies</option>
-                    <sanitizer sanitize="false" />
-				</param>
-
+                <expand macro="predefined_export_paths"/>
             </when>
             <when value="advanced">
                 <param name="file_pattern" type="text" label="File pattern (see below for placeholders}"
@@ -45,20 +40,17 @@
                        value="/scratch/{username}/{history}/{name}_{tags}.{ext}">
                             <validator type="empty_field" />
                             <sanitizer sanitize="false" />
-                            <!--<validator type="regex" message="Have to start from /scratch/ or /g/">^/[scratch|g]/.+</validator>-->
                 </param>
             </when>
         </conditional>
+        <param name="dry_run" type="boolean"
     </inputs>
     <outputs>
         <data name="log" format="txt" />
     </outputs>
     <help><![CDATA[
 
-        **Predefined locations**:
-            - Scratch: /scratch/{username}/galaxy_transfer/{history}/{name}.{ext}
-            - Group Share: /g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}
-            - WaveletMovies: **only for Aulehla users**
+        help_macro
 
         **File Pattern** Available placeholders are:
 

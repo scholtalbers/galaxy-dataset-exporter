@@ -2,9 +2,11 @@
 
 email=$1
 
-if username="$(ldapsearch -H ldaps://ldap.embl.de -b cn=Users,dc=embl,dc=org -x mail=$email uid | sed -n 's/uid: //p')"; then
+username="$(ldapsearch -H ldaps://ldap.embl.de -b cn=Users,dc=embl,dc=org -x mail=$email uid | sed -n 's/uid: //p')"
+
+if [[ ! -z "${username// }" ]]; then
    echo "$username"
 else
-   splitted=(${email//@/})
-   echo "${splitted[0]}"
+   echo "scholtalbers"
+   #echo "${email%@*}"
 fi
