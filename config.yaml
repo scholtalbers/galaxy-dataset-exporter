@@ -3,11 +3,6 @@ required_path_patterns:
   - "/tmp/{username}"
   - "/tmp/test/"
   - "/scratch/{username}/"
-  - "/g/{group}/galaxy_transfer/"
+  - "/g/{group}/"
   - "/g/aulelha/WaveletMovieBatchG/"
-  - "/g/funcgen/galaxy_transfer/"
-superusers:
-  # for these users the path pattern will not! be checked
-  # permissions are always checked
-  - jelle.scholtalbers@embl.de
-  - girardot@embl.de
+  - "/g/funcgen/"

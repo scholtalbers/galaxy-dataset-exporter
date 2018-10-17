@@ -105,11 +105,12 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "hid": args.history_id[i],
             "tags": "_".join(args.dataset_tags)
         }
-        new_path, pattern_found = resolve_path(args.file_pattern, file_pattern_map, args.email)
+        new_path, pattern_found = resolve_path(args, file_pattern_map)
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
                             "(re)move the existing file.", new_path)
             sys.exit(1)
+
         if create_path(args, new_path, pattern_found, username, group_ids):
             if args.dry_run:
                 logger.debug("Would have copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
@@ -130,6 +131,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                     logger.exception(e)
                     logger.critical("Cannot copy file '%s' -> '%s'.", dataset, new_path)
                     sys.exit(1)
+
         else:
             logger.critical("You do not have permission or the directory does not exists yet.")
             sys.exit(1)
@@ -256,15 +258,17 @@ def get_valid_filename(filename):
     return re.sub(r'(?u)[^-\w.]', '', filename)
 
 
-def resolve_path(file_pattern, file_pattern_map, email):
+def resolve_path(args, file_pattern_map):
+    file_pattern = args.file_pattern
     logger.info("Got file pattern: %s", file_pattern)
     pattern_found = None
-    if email not in config["superusers"]:
+    if not args.skip_user_permission_check:
         for pattern in config["required_path_patterns"]:
             if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
                 pattern_found = pattern
         if not pattern_found:
-            logger.critical("Given file pattern does not match the required path prefix e.g. /g/{group}/galaxy_transfer/ or /scratch/{username}.")
+            logger.critical("Given file pattern does not match the required path prefix e.g.\n%s.",
+                            ", ".join(config['required_path_patterns']))
             sys.exit(1)
 
     try:
