@@ -5,8 +5,10 @@
         <import>predefined_export_paths.xml</import>
     </macros>
     <command detect_errors="exit_code"><![CDATA[
+        #set is_admin = $__user_email__ in $__admin_users__
         python '$__tool_directory__/dataset_export.py'
             --email '$__user_email__'
+            --username '$__user_name__'
             #for $d in $datasets
                 #set tags = ','.join(str(t.value) for t in $d.tags)
                 --dataset '${d}'
@@ -23,6 +25,12 @@
                 --file_pattern '${options.file_pattern}'
             #end if
             --log '$log'
+            #if $is_admin:
+                --skip_user_permission_check
+            #end if
+            #if $dry_run:
+                --dry_run
+            #end if
     ]]></command>
     <inputs>
         <param name="datasets" type="data" format="data" multiple="true" label="Datasets to export" />
@@ -43,7 +51,8 @@
                 </param>
             </when>
         </conditional>
-        <param name="dry_run" type="boolean"
+        <param name="dry_run" type="boolean" label="Only do a dry run"
+               help="No directories will be created or files written! Very useful to find the right pattern!"/>
     </inputs>
     <outputs>
         <data name="log" format="txt" />

@@ -15,11 +15,11 @@ from yaml.scanner import ScannerError
 logger = logging.getLogger()
 
 
-# Command to that takes an email address as a single argument and returns the unix username.
+# Command to that takes a username and email address as arguments and returns the unix username.
 script_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 username_resolver_location = os.path.join(script_path, "resolve_username.sh")
 groups_resolver_location = os.path.join(script_path, "resolve_groups.sh")
-USERNAME_COMMAND=["bash", username_resolver_location, "{email}"]
+USERNAME_COMMAND=["bash", username_resolver_location, "{username}", "{email}"]
 # Command that takes a username as a single argument and returns all groups the user belongs to.
 GROUPS_COMMAND=["id", "-Gn", "{username}"]
 GROUP_IDS_COMMAND=["id", "-G", "{username}"]
@@ -36,7 +36,9 @@ with open(os.path.join(script_path, "config.yaml")) as c:
 def main():
     parser = argparse.ArgumentParser(
         description="Input/Output")
-    parser.add_argument("--dry_run", action="store_true", default=False, type=bool)
+    parser.add_argument("--dry_run", action="store_true", default=False)
+    parser.add_argument("--email")
+    parser.add_argument("--username")
 
     parser.add_argument("--dataset", action="append")
     parser.add_argument("--dataset_name", action="append")
@@ -47,13 +49,12 @@ def main():
 
     # output
     parser.add_argument("--file_pattern")
-    parser.add_argument("--email")
     parser.add_argument("--loglevel", default="DEBUG")
     parser.add_argument("--log", default=None)
 
     # permission related settings
-    parser.add_argument("--check-user-permissions", dest="check_user_permissions",
-                        default=True, help="Check that the user has read&write permissions to the provided directory.")
+    parser.add_argument("--skip_user_permission_check", action="store_true",
+                        default=False, help="Check that the user has read&write permissions to the provided directory.")
 
     args = parser.parse_args()
 
@@ -72,7 +73,7 @@ def main():
         logger.info("Dry run activated - not copying any files!")
 
     try:
-        username = resolve_username(args.email)
+        username = resolve_username(args.username, args.email)
         logger.debug("Found username: '%s'", username)
         primary_group, groups, group_ids = resolve_groups(username)
         logger.debug("Found primary group: '%s', group names: '%s' and ids: '%s'",
@@ -134,8 +135,8 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             sys.exit(1)
 
 
-def resolve_username(email):
-    return run_command(USERNAME_COMMAND, {"email": email}, "Getting username with: '%s'")
+def resolve_username(username, email):
+    return run_command(USERNAME_COMMAND, {"email": email, "username": username}, "Getting username with: '%s'")
 
 
 def run_command(command_list, format_dict, msg):
@@ -214,7 +215,10 @@ def create_path(args, path, pattern_found, username, group_ids):
     """
     directory_path = os.path.dirname(path)
     dir_exists = os.path.exists(directory_path)
-    can_write = check_permission(directory_path, pattern_found, username, group_ids)
+    if args.skip_user_permission_check:
+        can_write = True
+    else:
+        can_write = check_permission(directory_path, pattern_found, username, group_ids)
     if can_write and not dir_exists:
         if args.dry_run:
             logger.info("Would have created directory: '%s'", directory_path)
