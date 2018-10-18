@@ -3,17 +3,17 @@
         <param name="predefined_file_pattern" type="select" label="Predefined locations (see below for the patterns used)"
                        help='Use "Scratch" if you know how to use the commandline.
                        Use the "Group Share" if you want to browse the files from your desktop.'>
-            <option value="/scratch/{username}/galaxy_transfer/{history}/{name}.{ext}" selected="true">Scratch</option>
-            <option value="/g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}">Group Share</option>
-            <option value="/g/aulehla/WaveletMovieBatchG/{username}/{name}.{ext}">Aulehla WaveletMovies</option>
+            <option value="/scratch/{username}/galaxy_transfer/{history}/{name}" selected="true">Scratch</option>
+            <option value="/g/{group}/galaxy_transfer/{email}/{history}/{name}">Group Share</option>
+            <option value="/g/aulehla/WaveletMovieBatchG/{username}/{name}">Aulehla WaveletMovies</option>
             <sanitizer sanitize="false" />
         </param>
     </xml>
     <token name="help_macro">
 <![CDATA[
     **Predefined locations**:
-        - Scratch: /scratch/{username}/galaxy_transfer/{history}/{name}.{ext}
-        - Group Share: /g/{group}/galaxy_transfer/{email}/{history}/{name}.{ext}
+        - Scratch: /scratch/{username}/galaxy_transfer/{history}/{name}
+        - Group Share: /g/{group}/galaxy_transfer/{email}/{history}/{name}
         - WaveletMovies: **only for Aulehla users**
 
     ]]></token>
