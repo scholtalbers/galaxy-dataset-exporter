@@ -55,6 +55,10 @@ def main():
     # permission related settings
     parser.add_argument("--skip_user_permission_check", action="store_true",
                         default=False, help="Check that the user has read&write permissions to the provided directory.")
+    parser.add_argument("--run_with_primary_group", action="store_true",
+                        default=False, help="Try to create directories and files with the user's primary group set using"
+                                            "sg - primary_group -c '[cmd]'. This can only work if this script is"
+                                            "executed by a (system) user with this group membership.")
 
     args = parser.parse_args()
 
@@ -111,7 +115,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                             "(re)move the existing file.", new_path)
             sys.exit(1)
 
-        if create_path(args, new_path, pattern_found, username, group_ids):
+        if create_path(args, new_path, pattern_found, username, primary_group, group_ids):
             if args.dry_run:
                 logger.debug("Would have copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
             else:
@@ -141,14 +145,20 @@ def resolve_username(username, email):
     return run_command(USERNAME_COMMAND, {"email": email, "username": username}, "Getting username with: '%s'")
 
 
-def run_command(command_list, format_dict, msg):
+def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=None, args=None):
     cmd = []
     for cmd_part in command_list:
         cmd.append(cmd_part.format(**format_dict))
     logger.debug(msg, cmd)
+
+    if sg_group and args and args.run_with_primary_group:
+        # sg - group -c 'cmd'
+        cmd = ["sg", "-", sg_group, "-c", "'{}'".format(" ".join(cmd))]
     try:
         return subprocess.check_output(cmd).strip()
     except subprocess.CalledProcessError as e:
+        if raise_exception:
+            raise
         logger.critical(e)
         sys.exit(1)
 
@@ -211,7 +221,7 @@ def check_permission(path, pattern_found, username, group_ids):
     return check_permission(parent_directory, pattern_found, username, group_ids)
 
 
-def create_path(args, path, pattern_found, username, group_ids):
+def create_path(args, path, pattern_found, username, primary_group, group_ids):
     """
     Create path and check permissions
     """
@@ -227,14 +237,14 @@ def create_path(args, path, pattern_found, username, group_ids):
         else:
             try:
                 logger.info("Creating directory: '%s'", directory_path)
-                os.makedirs(directory_path)
-            except OSError as e:
-                if e.errno == 13:
+                run_command(["mkdir", "-p", directory_path], raise_exception=True, sg_group=primary_group)
+            except subprocess.CalledProcessError as e:
+                if "Permission denied" in e.output.decode():
                     logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
                                     "write permission on the given path. `chmod g+w %s` might just do the trick.",
                                     directory_path)
                 else:
-                    logger.critical(e)
+                    logger.critical(e.output.decode())
                 sys.exit(1)
     return can_write
 
