@@ -270,7 +270,8 @@ def resolve_path(args, file_pattern_map):
             logger.critical("Given file pattern does not match the required path prefix e.g.\n%s.",
                             ", ".join(config['required_path_patterns']))
             sys.exit(1)
-
+    else:
+        pattern_found = file_pattern
     try:
         new_path_mapped = file_pattern.format(**file_pattern_map)
     except KeyError as e:
