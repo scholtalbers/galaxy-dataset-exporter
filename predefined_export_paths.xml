@@ -5,7 +5,7 @@
                        Use the "Group Share" if you want to browse the files from your desktop.'>
             <option value="/scratch/{username}/galaxy_transfer/{history}/{name}" selected="true">Scratch</option>
             <option value="/g/{group}/galaxy_transfer/{email}/{history}/{name}">Group Share</option>
-            <option value="/g/aulehla/WaveletMovieG/{username}/{name}">Aulehla WaveletMovies</option>
+            <option value="/g/aulehla/WaveletMoviesG/{username}/{name}">Aulehla WaveletMovies</option>
             <sanitizer sanitize="false" />
         </param>
     </xml>
