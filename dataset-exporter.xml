@@ -1,5 +1,5 @@
 <tool id="dataset-exporter" name="Dataset Exporter" version="0.2.0">
-    <description>- transfer datasets to the network shares</description>
+    <description>- transfer datasets to network shares</description>
     <requirements>
     </requirements>
     <macros>
@@ -10,15 +10,31 @@
         python '$__tool_directory__/dataset_export.py'
             --email '$__user_email__'
             --username '$__user_name__'
-            #for $d in $datasets
-                #set tags = ','.join(str(t.value) for t in $d.tags)
-                --dataset '${d}'
-                --dataset_name '${d.element_identifier}'
-                --dataset_extension '${d.ext}'
-                --dataset_tags '${tags}'
-                --history_id '${d.hid}'
-                --history_name '${d.dataset.history.name}'
-            #end for
+
+            #if $collection:
+                #for $d in $collection:
+                    #set tags = ','.join(str(t.value) for t in $d.tags)
+                    --dataset '${d}'
+                    --dataset_name '${d.element_identifier}'
+                    --dataset_extension '${d.ext}'
+                    --collection_name '${collection.element_identifier}'
+                    --dataset_tags '${tags}'
+                    --history_id '${d.hid}'
+                    --history_name '${d.dataset.history.name}'
+                #end for
+            #end if
+            #if $datasets:
+                #for $d in $datasets
+                    #set tags = ','.join(str(t.value) for t in $d.tags)
+                    --dataset '${d}'
+                    --dataset_name '${d.element_identifier}'
+                    --dataset_extension '${d.ext}'
+                    --collection_name ''
+                    --dataset_tags '${tags}'
+                    --history_id '${d.hid}'
+                    --history_name '${d.dataset.history.name}'
+                #end for
+            #end if
 
             #if str( $options.selection_mode ) == "defaults":
                 --file_pattern '${options.predefined_file_pattern}'
@@ -34,7 +50,11 @@
             #end if
     ]]></command>
     <inputs>
-        <param name="datasets" type="data" format="data" multiple="true" label="Datasets to export" />
+        <param name="datasets" type="data" format="data" multiple="true" label="Datasets to export" optional="true"
+               help="Select one or more datasets to export. Or select a collection below!"/>
+        <param name="collection" type="data_collection" format="data" label="Collection to export" optional="true"
+               help="Select a collection to export, you can use the name of the collection through the {collection}
+               placeholder in the file pattern below."/>
         <conditional name="options">
             <param label="Use advanced options" name="selection_mode" type="select">
               <option selected="true" value="defaults">Use default options</option>
@@ -70,6 +90,7 @@
             - {id}: Dataset id
             - {name}: Dataset name
             - {ext}: Dataset extension (e.g. bam, fa)
+            - {collection}: Collection name, **only available** for 'Collection to export' inputs. Will be ignored otherwise.
             - {history}: history name
             - {tags}: all tags on the dataset seperated by a dash e.g. myfasta_tag1-tag2.fa
             - {hid}: Galaxy history id

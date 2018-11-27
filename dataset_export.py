@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--dataset", action="append")
     parser.add_argument("--dataset_name", action="append")
     parser.add_argument("--dataset_extension", action="append")
+    parser.add_argument("--collection_name", action="append")
     parser.add_argument("--dataset_tags", action="append")
     parser.add_argument("--history_id", action="append")
     parser.add_argument("--history_name", action="append")
@@ -107,7 +108,8 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "ext": args.dataset_extension[i],
             "history": args.history_name[i],
             "hid": args.history_id[i],
-            "tags": "_".join(args.dataset_tags)
+            "tags": "_".join(args.dataset_tags),
+            "collection": args.collection_name[i]
         }
         new_path, pattern_found = resolve_path(args, file_pattern_map)
         if os.path.exists(new_path):
@@ -286,6 +288,9 @@ def resolve_path(args, file_pattern_map):
         new_path_mapped = file_pattern.format(**file_pattern_map)
     except KeyError as e:
         logger.critical("Given file pattern cannot be resolved. Cannot match '{%s}'", e.args[0])
+        sys.exit(1)
+    except ValueError as e:
+        logger.critical("Given file pattern cannot be resolved. '%s'", e)
         sys.exit(1)
 
     pattern_found = pattern_found.format(**file_pattern_map)
