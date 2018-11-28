@@ -239,7 +239,7 @@ def create_path(args, path, pattern_found, username, primary_group, group_ids):
         else:
             try:
                 logger.info("Creating directory: '%s'", directory_path)
-                run_command(["mkdir", "-p", directory_path], raise_exception=True, sg_group=primary_group)
+                run_command(["mkdir", "-p", directory_path], {}, "Creating directory: '%s'", raise_exception=True, sg_group=primary_group)
             except subprocess.CalledProcessError as e:
                 if "Permission denied" in e.output.decode():
                     logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
