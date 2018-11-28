@@ -1,8 +1,6 @@
 required_path_patterns:
   # predefined and custom paths need to follow these patterns
   - "/tmp/{username}"
-  - "/tmp/test/"
   - "/scratch/{username}/"
   - "/g/{group}/"
-  - "/g/aulelha/WaveletMovieBatchG/"
-  - "/g/funcgen/"
+
