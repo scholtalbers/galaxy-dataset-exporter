@@ -48,6 +48,9 @@
             #if $dry_run:
                 --dry_run
             #end if
+            #if $primary_group:
+                --run_with_primary_group
+            #end if
     ]]></command>
     <inputs>
         <param name="datasets" type="data" format="data" multiple="true" label="Datasets to export" optional="true"
@@ -72,6 +75,8 @@
                 </param>
             </when>
         </conditional>
+        <param name="primary_group" type="boolean" label="Try to create directory and files with your primary group" checked="true"
+               help="Generally this is the recommend option. If you uncheck this, galaxy will export files with the permissive 777."/>
         <param name="dry_run" type="boolean" label="Only do a dry run"
                help="No directories will be created or files written! Very useful to find the right pattern!"/>
     </inputs>

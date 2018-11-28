@@ -88,8 +88,9 @@ def main():
         logger.critical("Cannot find unix username by '%s'. Please contact your Galaxy administrator.", args.email)
         sys.exit(1)
 
-    # ignore umask - we want 0o777
-    os.umask(0)
+    if not args.run_with_primary_group:
+        # ignore umask - we want 0o777
+        os.umask(0)
     copy_datasets(args, username, primary_group, groups, group_ids)
 
 
@@ -123,13 +124,17 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             else:
                 try:
                     # do the actual copy
-                    shutil.copyfile(dataset, new_path)
+                    #shutil.copyfile(dataset, new_path)
+                    run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset", raise_exception=True, sg_group=primary_group, args=args)
                     logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
                 except OSError as e:
                     if e.errno == 13:
-                        logger.critical("Galaxy cannot copy the file to the destination path. Please make sure the galaxy "
-                                        "user has write permission on the given path. "
-                                        "`chmod g+w %s` might just do the trick.", os.path.dirname(new_path))
+                        msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write permission on the given path. "
+                        if args.run_with_primary_group:
+                            msg += "`chmod g+w %s` might just do the trick."
+                        else:
+                            msg += "`chmod og+w %s` might be needed!"
+                        logger.critical(msg, os.path.dirname(new_path))
                     else:
                         logger.critical(e)
                     sys.exit(1)
@@ -146,21 +151,25 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
 def resolve_username(username, email):
     return run_command(USERNAME_COMMAND, {"email": email, "username": username}, "Getting username with: '%s'")
 
+def subprocess_umask():
+    os.setpgrp()
+    os.umask(002)
 
 def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=None, args=None):
     cmd = []
     for cmd_part in command_list:
         cmd.append(cmd_part.format(**format_dict))
     logger.debug(msg, cmd)
-
+    subprocess_kwargs = {}
     if sg_group and args and args.run_with_primary_group:
         # sg - group -c 'cmd'
-        cmd = ["sg", "-", sg_group, "-c", "'{}'".format(" ".join(cmd))]
+        subprocess_kwargs = {"shell": True, "preexec_fn": subprocess_umask}
+        cmd = "sg - {} -c '{}'".format(sg_group, " ".join(cmd))
     try:
-        return subprocess.check_output(cmd).strip()
+        return subprocess.check_output(cmd, **subprocess_kwargs).strip()
     except subprocess.CalledProcessError as e:
         if raise_exception:
-            raise
+            raise e
         logger.critical(e)
         sys.exit(1)
 
@@ -239,14 +248,15 @@ def create_path(args, path, pattern_found, username, primary_group, group_ids):
         else:
             try:
                 logger.info("Creating directory: '%s'", directory_path)
-                run_command(["mkdir", "-p", directory_path], {}, "Creating directory: '%s'", raise_exception=True, sg_group=primary_group)
+                run_command(["mkdir", "-p", directory_path], {}, "Creating directory: '%s'", raise_exception=True, sg_group=primary_group, args=args)
             except subprocess.CalledProcessError as e:
-                if "Permission denied" in e.output.decode():
-                    logger.critical("Galaxy cannot create the directory path. Please make sure the galaxy user has"
-                                    "write permission on the given path. `chmod g+w %s` might just do the trick.",
-                                    directory_path)
+                msg = "Galaxy cannot create the directory path. Please make sure the galaxy user has write permission on the given path. "
+                if args.run_with_primary_group:
+                    msg += "`chmod g+w %s` might just do the trick."
                 else:
-                    logger.critical(e.output.decode())
+                    msg += "`chmod og+w %s` might be needed!"
+                logger.critical(msg, directory_path)
+
                 sys.exit(1)
     return can_write
 
