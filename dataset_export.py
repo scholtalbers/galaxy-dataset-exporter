@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import argparse
+import copy
 import logging
 import os
 import re
-import shutil
 import stat
 import subprocess
 import sys
@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--dataset", action="append")
     parser.add_argument("--dataset_name", action="append")
     parser.add_argument("--dataset_extension", action="append")
+    parser.add_argument("--dataset_extra_files", action="append")
     parser.add_argument("--collection_name", action="append")
     parser.add_argument("--dataset_tags", action="append")
     parser.add_argument("--history_id", action="append")
@@ -50,6 +51,7 @@ def main():
 
     # output
     parser.add_argument("--file_pattern")
+    parser.add_argument("--copy_extra_files", action="store_true", default=False)
     parser.add_argument("--loglevel", default="DEBUG")
     parser.add_argument("--log", default=None)
 
@@ -112,7 +114,8 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "tags": "_".join(args.dataset_tags),
             "collection": args.collection_name[i]
         }
-        new_path, pattern_found = resolve_path(args, file_pattern_map)
+
+        new_path, pattern_found = resolve_path(args, file_pattern_map, groups)
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
                             "(re)move the existing file.", new_path)
@@ -124,9 +127,12 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             else:
                 try:
                     # do the actual copy
-                    #shutil.copyfile(dataset, new_path)
                     run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset", raise_exception=True, sg_group=primary_group, args=args)
                     logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+                    if args.copy_extra_files and os.path.exists(args.dataset_extra_files[i]):
+                        new_extra_path = new_path + "_files"
+                        logger.info("Will try to copy extra files to '%s'", new_extra_path)
+                        run_command(["cp", "-r", "--no-preserve", "mode", args.dataset_extra_files[i], new_extra_path], {}, "Copying extra datasets", raise_exception=True, sg_group=primary_group, args=args)
                 except OSError as e:
                     if e.errno == 13:
                         msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write permission on the given path. "
@@ -232,11 +238,13 @@ def check_permission(path, pattern_found, username, group_ids):
     return check_permission(parent_directory, pattern_found, username, group_ids)
 
 
-def create_path(args, path, pattern_found, username, primary_group, group_ids):
+def create_path(args, path, pattern_found, username, primary_group, group_ids, create_as_directory=False):
     """
     Create path and check permissions
     """
-    directory_path = os.path.dirname(path)
+    directory_path = path
+    if not create_as_directory:
+        directory_path = os.path.dirname(path)
     dir_exists = os.path.exists(directory_path)
     if args.skip_user_permission_check:
         can_write = True
@@ -280,14 +288,25 @@ def get_valid_filename(filename):
     return re.sub(r'(?u)[^-\w.]', '', filename)
 
 
-def resolve_path(args, file_pattern_map):
+def resolve_path(args, file_pattern_map, groups):
     file_pattern = args.file_pattern
     logger.info("Got file pattern: %s", file_pattern)
     pattern_found = None
     if not args.skip_user_permission_check:
+        # for each group a different pattern map
+        file_pattern_maps = []
+        for group in groups:
+            alt_file_pattern_map = copy.deepcopy(file_pattern_map)
+            alt_file_pattern_map["group"] = group
+            file_pattern_maps.append(alt_file_pattern_map)
         for pattern in config["required_path_patterns"]:
-            if file_pattern.startswith(pattern) or file_pattern.startswith(pattern.format(**file_pattern_map)):
+            if file_pattern.startswith(pattern):
                 pattern_found = pattern
+            else:
+                for _pattern_map in file_pattern_maps:
+                    if file_pattern.startswith(pattern.format(**_pattern_map)):
+                        pattern_found = pattern
+                        break
         if not pattern_found:
             logger.critical("Given file pattern does not match the required path prefix e.g.\n%s.",
                             ", ".join(config['required_path_patterns']))
