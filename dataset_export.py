@@ -127,12 +127,12 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             else:
                 try:
                     # do the actual copy
-                    run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset", raise_exception=True, sg_group=primary_group, args=args)
+                    run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset with '%s'", raise_exception=True, sg_group=primary_group, args=args)
                     logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
                     if args.copy_extra_files and os.path.exists(args.dataset_extra_files[i]):
                         new_extra_path = new_path + "_files"
                         logger.info("Will try to copy extra files to '%s'", new_extra_path)
-                        run_command(["cp", "-r", "--no-preserve", "mode", args.dataset_extra_files[i], new_extra_path], {}, "Copying extra datasets", raise_exception=True, sg_group=primary_group, args=args)
+                        run_command(["cp", "-r", "--no-preserve", "mode", args.dataset_extra_files[i], new_extra_path], {}, "Copying extra datasets with '%s'", raise_exception=True, sg_group=primary_group, args=args)
                 except OSError as e:
                     if e.errno == 13:
                         msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write permission on the given path. "
@@ -145,8 +145,8 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                         logger.critical(e)
                     sys.exit(1)
                 except Exception as e:
-                    logger.exception(e)
                     logger.critical("Cannot copy file '%s' -> '%s'.", dataset, new_path)
+                    logger.critical(e)
                     sys.exit(1)
 
         else:
@@ -157,9 +157,11 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
 def resolve_username(username, email):
     return run_command(USERNAME_COMMAND, {"email": email, "username": username}, "Getting username with: '%s'")
 
+
 def subprocess_umask():
     os.setpgrp()
     os.umask(002)
+
 
 def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=None, args=None):
     cmd = []
@@ -277,7 +279,7 @@ def get_valid_filepath(path):
 
 def get_valid_directory(directory):
     directory = str(directory).strip().replace(' ', '_')
-    return directory
+    return re.sub(r'(?u)[^-\w./]', '', directory)
 
 
 def get_valid_filename(filename):

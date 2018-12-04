@@ -1,4 +1,4 @@
-<tool id="dataset-exporter" name="Dataset Exporter" version="0.4.0" profile="18.01">
+<tool id="dataset-exporter" name="Dataset Exporter" version="0.4.1" profile="18.01">
     <description>- transfer datasets to network shares</description>
     <requirements>
     </requirements>
