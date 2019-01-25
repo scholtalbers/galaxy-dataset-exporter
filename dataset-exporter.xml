@@ -1,4 +1,4 @@
-<tool id="dataset-exporter" name="Dataset Exporter" version="0.4.1" profile="18.01">
+<tool id="dataset-exporter" name="Dataset Exporter" version="0.4.2" profile="18.01">
     <description>- transfer datasets to network shares</description>
     <requirements>
     </requirements>
@@ -13,15 +13,40 @@
 
             #if $collection:
                 #for $d in $collection:
-                    #set tags = ','.join(str(t.value) for t in $d.tags)
-                    --dataset '${d}'
-                    --dataset_name '${d.element_identifier}'
-                    --dataset_extension '${d.ext}'
-                    --dataset_extra_files '${d.extra_files_path}'
-                    --collection_name '${collection.element_identifier}'
-                    --dataset_tags '${tags}'
-                    --history_id '${d.hid}'
-                    --history_name '${d.dataset.history.name}'
+                    #if hasattr($d, "tags"):
+                        #set tags = ','.join(str(t.value) for t in $d.tags)
+                        --dataset '${d}'
+                        --dataset_name '${d.element_identifier}'
+                        --dataset_extension '${d.ext}'
+                        --dataset_extra_files '${d.extra_files_path}'
+                        --collection_name '${collection.element_identifier}'
+                        --dataset_tags '${tags}'
+                        --history_id '${d.hid}'
+                        --history_name '${d.dataset.history.name}'
+                    #elif hasattr($d, "forward"):
+                        ## this is most probably a collection with a list of pairs
+                        ## so we just repeat this block..
+
+                        #set tags = ','.join(str(t.value) for t in $d.forward.tags)
+                        --dataset '${d.forward}'
+                        --dataset_name '${d.element_identifier}_${d.forward.element_identifier}'
+                        --dataset_extension '${d.forward.ext}'
+                        --dataset_extra_files '${d.forward.extra_files_path}'
+                        --collection_name '${collection.element_identifier}'
+                        --dataset_tags '${tags}'
+                        --history_id '${d.forward.hid}'
+                        --history_name '${d.forward.dataset.history.name}'
+
+                        #set tags = ','.join(str(t.value) for t in $d.reverse.tags)
+                        --dataset '${d.reverse}'
+                        --dataset_name '${d.element_identifier}_${d.reverse.element_identifier}'
+                        --dataset_extension '${d.reverse.ext}'
+                        --dataset_extra_files '${d.reverse.extra_files_path}'
+                        --collection_name '${collection.element_identifier}'
+                        --dataset_tags '${tags}'
+                        --history_id '${d.reverse.hid}'
+                        --history_name '${d.reverse.dataset.history.name}'
+                    #end if
                 #end for
             #end if
             #if $datasets:
