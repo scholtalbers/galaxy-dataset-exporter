@@ -111,7 +111,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "ext": args.dataset_extension[i],
             "history": args.history_name[i],
             "hid": args.history_id[i],
-            "tags": "_".join(args.dataset_tags),
+            "tags": "_".join(tags),
             "collection": args.collection_name[i]
         }
 
