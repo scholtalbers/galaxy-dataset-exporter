@@ -33,6 +33,7 @@ with open(os.path.join(script_path, "config.yaml")) as c:
         logger.exception("Config yaml file incorrect.")
         sys.exit(1)
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Input/Output")
@@ -145,8 +146,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                         logger.critical(e)
                     sys.exit(1)
                 except Exception as e:
-                    logger.critical("Cannot copy file '%s' -> '%s'.", dataset, new_path)
-                    logger.critical(e)
+                    logger.exception("Cannot copy file '%s' -> '%s'.", dataset, new_path)
                     sys.exit(1)
 
         else:
@@ -333,6 +333,7 @@ def resolve_path(args, file_pattern_map, groups):
     new_path = os.path.realpath(new_path_mapped)
     logger.info("Resolved new path: '%s'", new_path_mapped)
     return new_path, pattern_found
+
 
 if __name__ == "__main__":
     main()
