@@ -349,7 +349,7 @@ def resolve_path(args, file_pattern_map, groups, named_tags):
         pattern_found = file_pattern
 
     # first string replace any named tags
-    string_replace_named_tags(file_pattern, named_tags)
+    file_pattern = string_replace_named_tags(file_pattern, named_tags)
 
     # then any other keys will be matched
     try:
