@@ -1,5 +1,5 @@
 <macros>
-    <xml name="predefined_export_paths">
+    <xml name="@predefined_export_paths@">
         <param name="predefined_file_pattern" type="select" label="Predefined locations (see below for the patterns used)"
                        help='Use "Scratch" if you know how to use the commandline.
                        Use the "Group Share" if you want to browse the files from your desktop.'>
@@ -9,7 +9,7 @@
             <sanitizer sanitize="false" />
         </param>
     </xml>
-    <token name="help_macro">
+    <token name="@help_macro@">
 <![CDATA[
     **Predefined locations**:
         - Scratch: /scratch/{username}/galaxy_transfer/{history}/{name}

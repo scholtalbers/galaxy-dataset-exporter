@@ -1,9 +1,20 @@
-<tool id="dataset-exporter" name="Dataset Exporter" version="0.4.2" profile="18.01">
+<tool id="dataset-exporter" name="Dataset Exporter" version="0.5.0" profile="18.01">
     <description>- transfer datasets to network shares</description>
     <requirements>
     </requirements>
     <macros>
         <import>predefined_export_paths.xml</import>
+        <token name="@resolve_tags_for_dataset@">
+            #set taglist = []
+            #for $t in $dataset.tags:
+                #if $t.user_tname == 'name':
+                    #set taglist = taglist + [t.user_value]
+                #else:
+                    #set taglist = taglist + [t.user_tname]
+                #end if
+            #end for
+            #set tags = ','.join(taglist)
+        </token>
     </macros>
     <command detect_errors="exit_code"><![CDATA[
         #set is_admin = $__user_email__ in $__admin_users__
@@ -14,7 +25,8 @@
             #if $collection:
                 #for $d in $collection:
                     #if hasattr($d, "tags"):
-                        #set tags = ','.join(str(t.value) for t in $d.tags)
+                        #set dataset = d
+                        @resolve_tags_for_dataset@
                         --dataset '${d}'
                         --dataset_name '${d.element_identifier}'
                         --dataset_extension '${d.ext}'
@@ -26,8 +38,8 @@
                     #elif hasattr($d, "forward"):
                         ## this is most probably a collection with a list of pairs
                         ## so we just repeat this block..
-
-                        #set tags = ','.join(str(t.value) for t in $d.forward.tags)
+                        #set dataset = d.forward
+                        @resolve_tags_for_dataset@
                         --dataset '${d.forward}'
                         --dataset_name '${d.element_identifier}_${d.forward.element_identifier}'
                         --dataset_extension '${d.forward.ext}'
@@ -37,7 +49,8 @@
                         --history_id '${d.forward.hid}'
                         --history_name '${d.forward.dataset.history.name}'
 
-                        #set tags = ','.join(str(t.value) for t in $d.reverse.tags)
+                        #set dataset = d.reverse
+                        @resolve_tags_for_dataset@
                         --dataset '${d.reverse}'
                         --dataset_name '${d.element_identifier}_${d.reverse.element_identifier}'
                         --dataset_extension '${d.reverse.ext}'
@@ -50,16 +63,16 @@
                 #end for
             #end if
             #if $datasets:
-                #for $d in $datasets
-                    #set tags = ','.join(str(t.value) for t in $d.tags)
-                    --dataset '${d}'
-                    --dataset_name '${d.element_identifier}'
-                    --dataset_extension '${d.ext}'
-                    --dataset_extra_files '${d.extra_files_path}'
+                #for $dataset in $datasets
+                    @resolve_tags_for_dataset@
+                    --dataset '${dataset}'
+                    --dataset_name '${dataset.element_identifier}'
+                    --dataset_extension '${dataset.ext}'
+                    --dataset_extra_files '${dataset.extra_files_path}'
                     --collection_name ''
                     --dataset_tags '${tags}'
-                    --history_id '${d.hid}'
-                    --history_name '${d.dataset.history.name}'
+                    --history_id '${dataset.hid}'
+                    --history_name '${dataset.dataset.history.name}'
                 #end for
             #end if
 
@@ -94,7 +107,7 @@
               <option value="advanced">Use advanced options</option>
             </param>
             <when value="defaults">
-                <expand macro="predefined_export_paths"/>
+                <expand macro="@predefined_export_paths@"/>
             </when>
             <when value="advanced">
                 <param name="file_pattern" type="text" label="File pattern (see below for placeholders}"
@@ -119,7 +132,7 @@
     </outputs>
     <help><![CDATA[
 
-        help_macro
+        @help_macro@
 
         **File Pattern** Available placeholders are:
 
@@ -131,7 +144,8 @@
             - {ext}: Dataset extension (e.g. bam, fa)
             - {collection}: Collection name, **only available** for 'Collection to export' inputs. Will be ignored otherwise.
             - {history}: history name
-            - {tags}: all tags on the dataset seperated by a dash e.g. myfasta_tag1-tag2.fa
+            - {tags}: all tags on the dataset separated by a dash e.g. myfasta_tag1-tag2.fa
+            - {tag:<name>}: only use the value of the tag named '<name>', e.g. a dataset  `SeqX_from_PMID_{tag:PMID}.fa` with the tag `#PMID:23002` becomes `SeqX_from_PMID_23002.fa`
             - {hid}: Galaxy history id
 
             E.g. "/g/{group}/{username}/{history}/{name}_{tags}.{ext}" will become: "/g/gbcs/scholtal/My_History/myfasta_tag1-tag2.fa"

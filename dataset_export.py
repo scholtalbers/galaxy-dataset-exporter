@@ -3,28 +3,27 @@ import argparse
 import copy
 import logging
 import os
+import pwd
 import re
 import stat
 import subprocess
 import sys
-import yaml
-import pwd
 
+import yaml
 from yaml.scanner import ScannerError
 
 logger = logging.getLogger()
-
 
 # Command to that takes a username and email address as arguments and returns the unix username.
 script_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 username_resolver_location = os.path.join(script_path, "resolve_username.sh")
 groups_resolver_location = os.path.join(script_path, "resolve_groups.sh")
-USERNAME_COMMAND=["bash", username_resolver_location, "{username}", "{email}"]
+USERNAME_COMMAND = ["bash", username_resolver_location, "{username}", "{email}"]
 # Command that takes a username as a single argument and returns all groups the user belongs to.
-GROUPS_COMMAND=["id", "-Gn", "{username}"]
-GROUP_IDS_COMMAND=["id", "-G", "{username}"]
+GROUPS_COMMAND = ["id", "-Gn", "{username}"]
+GROUP_IDS_COMMAND = ["id", "-G", "{username}"]
 # Command that takes a username as a single argument and returns the primary group"
-PRIMARY_GROUP_COMMAND=["id", "-gn", "{username}"]
+PRIMARY_GROUP_COMMAND = ["id", "-gn", "{username}"]
 
 with open(os.path.join(script_path, "config.yaml")) as c:
     try:
@@ -60,9 +59,10 @@ def main():
     parser.add_argument("--skip_user_permission_check", action="store_true",
                         default=False, help="Check that the user has read&write permissions to the provided directory.")
     parser.add_argument("--run_with_primary_group", action="store_true",
-                        default=False, help="Try to create directories and files with the user's primary group set using"
-                                            "sg - primary_group -c '[cmd]'. This can only work if this script is"
-                                            "executed by a (system) user with this group membership.")
+                        default=False,
+                        help="Try to create directories and files with the user's primary group set using"
+                             "sg - primary_group -c '[cmd]'. This can only work if this script is"
+                             "executed by a (system) user with this group membership.")
 
     args = parser.parse_args()
 
@@ -97,13 +97,25 @@ def main():
     copy_datasets(args, username, primary_group, groups, group_ids)
 
 
+def parse_tags(tag_string):
+    tags = []
+    named_tags = {}
+    for tag in tag_string.split(","):
+        if tag:
+            tags.append(tag)
+            if ":" in tag:
+                name, value = tag.split(":", 1)
+                named_tags[name] = value
+    return tags, named_tags
+
+
 def copy_datasets(args, username, primary_group, groups, group_ids):
     for i, dataset in enumerate(args.dataset):
         tags = []
+        named_tags = {}
         if args.dataset_tags[i]:
-            for tag in args.dataset_tags[i].split(","):
-                if tag and tag != "None":
-                    tags.append(tag)
+            tags, named_tags = parse_tags(args.dataset_tags[i])
+
         file_pattern_map = {
             "username": username,
             "group": primary_group,
@@ -116,7 +128,7 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "collection": args.collection_name[i]
         }
 
-        new_path, pattern_found = resolve_path(args, file_pattern_map, groups)
+        new_path, pattern_found = resolve_path(args, file_pattern_map, groups, named_tags)
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
                             "(re)move the existing file.", new_path)
@@ -128,12 +140,15 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             else:
                 try:
                     # do the actual copy
-                    run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset with '%s'", raise_exception=True, sg_group=primary_group, args=args)
+                    run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset with '%s'",
+                                raise_exception=True, sg_group=primary_group, args=args)
                     logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
                     if args.copy_extra_files and os.path.exists(args.dataset_extra_files[i]):
                         new_extra_path = new_path + "_files"
                         logger.info("Will try to copy extra files to '%s'", new_extra_path)
-                        run_command(["cp", "-r", "--no-preserve", "mode", args.dataset_extra_files[i], new_extra_path], {}, "Copying extra datasets with '%s'", raise_exception=True, sg_group=primary_group, args=args)
+                        run_command(["cp", "-r", "--no-preserve", "mode", args.dataset_extra_files[i], new_extra_path],
+                                    {}, "Copying extra datasets with '%s'", raise_exception=True,
+                                    sg_group=primary_group, args=args)
                 except OSError as e:
                     if e.errno == 13:
                         msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write permission on the given path. "
@@ -160,7 +175,7 @@ def resolve_username(username, email):
 
 def subprocess_umask():
     os.setpgrp()
-    os.umask(002)
+    os.umask(0o002)
 
 
 def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=None, args=None):
@@ -258,7 +273,8 @@ def create_path(args, path, pattern_found, username, primary_group, group_ids, c
         else:
             try:
                 logger.info("Creating directory: '%s'", directory_path)
-                run_command(["mkdir", "-p", directory_path], {}, "Creating directory: '%s'", raise_exception=True, sg_group=primary_group, args=args)
+                run_command(["mkdir", "-p", directory_path], {}, "Creating directory: '%s'", raise_exception=True,
+                            sg_group=primary_group, args=args)
             except subprocess.CalledProcessError as e:
                 msg = "Galaxy cannot create the directory path. Please make sure the galaxy user has write permission on the given path. "
                 if args.run_with_primary_group:
@@ -290,7 +306,23 @@ def get_valid_filename(filename):
     return re.sub(r'(?u)[^-\w.]', '', filename)
 
 
-def resolve_path(args, file_pattern_map, groups):
+def string_replace_named_tags(file_pattern, named_tags):
+    """
+    e.g. a dataset  `SeqX_from_PMID_{tag:PMID}.fa` with the tag `#PMID:23002` becomes `SeqX_from_PMID_23002.fa`
+    """
+    for match in re.finditer(r"({tag:(?P<key>.+?)})", file_pattern):
+        # every key has to be present in the named tags or we fail
+        tag_name = match.group("key")
+        try:
+            file_pattern = re.sub(match.group(0), named_tags[tag_name], file_pattern)
+        except KeyError:
+            logger.critical("Could not find named tag '%s' mentioned in pattern on dataset, dataset only has the "
+                            "following tags:\n%s", tag_name, ", ".join(named_tags.keys()))
+            sys.exit(1)
+    return file_pattern
+
+
+def resolve_path(args, file_pattern_map, groups, named_tags):
     file_pattern = args.file_pattern
     logger.info("Got file pattern: %s", file_pattern)
     pattern_found = None
@@ -315,6 +347,11 @@ def resolve_path(args, file_pattern_map, groups):
             sys.exit(1)
     else:
         pattern_found = file_pattern
+
+    # first string replace any named tags
+    string_replace_named_tags(file_pattern, named_tags)
+
+    # then any other keys will be matched
     try:
         new_path_mapped = file_pattern.format(**file_pattern_map)
     except KeyError as e:
@@ -337,6 +374,3 @@ def resolve_path(args, file_pattern_map, groups):
 
 if __name__ == "__main__":
     main()
-
-
-
