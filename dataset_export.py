@@ -361,6 +361,7 @@ def resolve_path(args, file_pattern_map, groups, named_tags):
         logger.critical("Given file pattern cannot be resolved. '%s'", e)
         sys.exit(1)
 
+    pattern_found = string_replace_named_tags(pattern_found, named_tags)
     pattern_found = pattern_found.format(**file_pattern_map)
 
     logger.debug("Make given file path '%s' valid", new_path_mapped)
