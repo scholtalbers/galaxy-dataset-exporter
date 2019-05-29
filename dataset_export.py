@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import copy
+import json
 import logging
 import os
 import pwd
@@ -52,6 +53,7 @@ def main():
     # output
     parser.add_argument("--file_pattern")
     parser.add_argument("--copy_extra_files", action="store_true", default=False)
+    parser.add_argument("--export_metadata", action="store_true", default=False)
     parser.add_argument("--loglevel", default="DEBUG")
     parser.add_argument("--log", default=None)
 
@@ -98,24 +100,23 @@ def main():
 
 
 def parse_tags(tag_string):
-    tags = []
+    all_tags = []
+    simple_tags = []
     named_tags = {}
     for tag in tag_string.split(","):
         if tag:
-            tags.append(tag)
+            all_tags.append(tag)
             if ":" in tag:
                 name, value = tag.split(":", 1)
                 named_tags[name] = value
-    return tags, named_tags
+            else:
+                simple_tags.append(tag)
+    return all_tags, simple_tags, named_tags
 
 
 def copy_datasets(args, username, primary_group, groups, group_ids):
     for i, dataset in enumerate(args.dataset):
-        tags = []
-        named_tags = {}
-        if args.dataset_tags[i]:
-            tags, named_tags = parse_tags(args.dataset_tags[i])
-
+        all_tags, simple_tags, named_tags = parse_tags(args.dataset_tags[i])
         file_pattern_map = {
             "username": username,
             "group": primary_group,
@@ -124,10 +125,11 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "ext": args.dataset_extension[i],
             "history": args.history_name[i],
             "hid": args.history_id[i],
-            "tags": "_".join(tags),
+            "tags": "_".join(all_tags),
             "collection": args.collection_name[i]
         }
-
+        metadata = generate_metadata(file_pattern_map, simple_tags, named_tags)
+        logger.debug("Got following metadata:\n%s", json.dumps(metadata))
         new_path, pattern_found = resolve_path(args, file_pattern_map, groups, named_tags)
         if os.path.exists(new_path):
             logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
@@ -135,8 +137,11 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             sys.exit(1)
 
         if create_path(args, new_path, pattern_found, username, primary_group, group_ids):
+            metadata_path = new_path + ".info"
             if args.dry_run:
                 logger.debug("Would have copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+                if args.export_metadata:
+                    logger.debug("Would have exported the metadata to %s", metadata_path)
             else:
                 try:
                     # do the actual copy
@@ -164,6 +169,10 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                     logger.exception("Cannot copy file '%s' -> '%s'.", dataset, new_path)
                     sys.exit(1)
 
+                if args.export_metadata:
+                    with open(metadata_path, "w") as info:
+                        json.dump(metadata, info, indent=2)
+                    logger.info("Exported the metadata to %s",metadata_path)
         else:
             logger.critical("You do not have permission or the directory does not exists yet.")
             sys.exit(1)
@@ -195,6 +204,16 @@ def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=
             raise e
         logger.critical(e)
         sys.exit(1)
+
+
+def generate_metadata(file_pattern_map, tags, named_tags):
+    metadata = copy.deepcopy(file_pattern_map)
+    metadata["tags"] = named_tags
+    for tag in tags:
+        # skip the named tags that are still in this list
+
+        metadata["tags"][tag] = None
+    return metadata
 
 
 def resolve_groups(username):
