@@ -210,8 +210,6 @@ def generate_metadata(file_pattern_map, tags, named_tags):
     metadata = copy.deepcopy(file_pattern_map)
     metadata["tags"] = named_tags
     for tag in tags:
-        # skip the named tags that are still in this list
-
         metadata["tags"][tag] = None
     return metadata
 
