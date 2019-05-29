@@ -143,39 +143,50 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
                 if args.export_metadata:
                     logger.debug("Would have exported the metadata to %s", metadata_path)
             else:
-                try:
-                    # do the actual copy
-                    run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset with '%s'",
-                                raise_exception=True, sg_group=primary_group, args=args)
-                    logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
-                    if args.copy_extra_files and os.path.exists(args.dataset_extra_files[i]):
-                        new_extra_path = new_path + "_files"
-                        logger.info("Will try to copy extra files to '%s'", new_extra_path)
-                        run_command(["cp", "-r", "--no-preserve", "mode", args.dataset_extra_files[i], new_extra_path],
-                                    {}, "Copying extra datasets with '%s'", raise_exception=True,
-                                    sg_group=primary_group, args=args)
-                except OSError as e:
-                    if e.errno == 13:
-                        msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write permission on the given path. "
-                        if args.run_with_primary_group:
-                            msg += "`chmod g+w %s` might just do the trick."
-                        else:
-                            msg += "`chmod og+w %s` might be needed!"
-                        logger.critical(msg, os.path.dirname(new_path))
-                    else:
-                        logger.critical(e)
-                    sys.exit(1)
-                except Exception as e:
-                    logger.exception("Cannot copy file '%s' -> '%s'.", dataset, new_path)
-                    sys.exit(1)
-
-                if args.export_metadata:
-                    with open(metadata_path, "w") as info:
-                        json.dump(metadata, info, indent=2)
-                    logger.info("Exported the metadata to %s",metadata_path)
+                copy_dataset(args, dataset, args.dataset_extra_files[i], file_pattern_map, metadata, metadata_path,
+                             new_path, primary_group)
         else:
             logger.critical("You do not have permission or the directory does not exists yet.")
             sys.exit(1)
+
+
+def copy_dataset(args, dataset, dataset_extra_files, file_pattern_map, metadata, metadata_path, new_path,
+                 primary_group):
+    try:
+        # do the actual copy
+        run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset with '%s'",
+                    raise_exception=True, sg_group=primary_group, args=args)
+        logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+        if args.copy_extra_files and os.path.exists(dataset_extra_files):
+            new_extra_path = new_path + "_files"
+            logger.info("Will try to copy extra files to '%s'", new_extra_path)
+            run_command(["cp", "-r", "--no-preserve", "mode", dataset_extra_files, new_extra_path],
+                        {}, "Copying extra datasets with '%s'", raise_exception=True,
+                        sg_group=primary_group, args=args)
+    except OSError as e:
+        handle_oserror(args, e, new_path)
+    except Exception as e:
+        logger.exception("Cannot copy file '%s' -> '%s'.", dataset, new_path)
+        sys.exit(1)
+
+    if args.export_metadata:
+        with open(metadata_path, "w") as info:
+            json.dump(metadata, info, indent=2)
+        logger.info("Exported the metadata to %s", metadata_path)
+
+
+def handle_oserror(args, e, new_path):
+    if e.errno == 13:
+        msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write " \
+              "permission on the given path. "
+        if args.run_with_primary_group:
+            msg += "`chmod g+w %s` might just do the trick."
+        else:
+            msg += "`chmod og+w %s` might be needed!"
+        logger.critical(msg, os.path.dirname(new_path))
+    else:
+        logger.critical(e)
+    sys.exit(1)
 
 
 def resolve_username(username, email):
