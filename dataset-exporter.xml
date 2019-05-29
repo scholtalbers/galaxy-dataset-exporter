@@ -85,9 +85,9 @@
                 #if $options.copy_extra_files:
                     --copy_extra_files
                 #end if
-            #end if
-            #if $options.export_metadata:
-                --export_metadata
+                #if $options.export_metadata:
+                    --export_metadata
+                #end if
             #end if
             #if $group_readonly:
                 --group_readonly
