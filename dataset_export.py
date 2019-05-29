@@ -31,7 +31,7 @@ CHMOD = 0o664
 
 with open(script_path / "config.yaml") as c:
     try:
-        config = yaml.load(c)
+        config = yaml.load(c, Loader=yaml.FullLoader)
     except ScannerError:
         logger.exception("Config yaml file incorrect.")
         sys.exit(1)
@@ -214,7 +214,6 @@ def resolve_username(username, email):
 def subprocess_umask():
     os.setpgrp()
     os.umask(UMASK)
-    logger.debug(f"Current umask: {UMASK}")
 
 
 def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=None, args=None):
