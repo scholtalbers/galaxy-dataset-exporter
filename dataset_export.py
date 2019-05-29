@@ -9,6 +9,7 @@ import re
 import stat
 import subprocess
 import sys
+from pathlib import Path
 
 import yaml
 from yaml.scanner import ScannerError
@@ -16,17 +17,19 @@ from yaml.scanner import ScannerError
 logger = logging.getLogger()
 
 # Command to that takes a username and email address as arguments and returns the unix username.
-script_path = os.path.dirname(os.path.realpath(sys.argv[0]))
-username_resolver_location = os.path.join(script_path, "resolve_username.sh")
-groups_resolver_location = os.path.join(script_path, "resolve_groups.sh")
-USERNAME_COMMAND = ["bash", username_resolver_location, "{username}", "{email}"]
+
+script_path = Path(sys.argv[0]).parent
+username_resolver_location = script_path / "resolve_username.sh"
+USERNAME_COMMAND = ["bash", str(username_resolver_location), "{username}", "{email}"]
 # Command that takes a username as a single argument and returns all groups the user belongs to.
 GROUPS_COMMAND = ["id", "-Gn", "{username}"]
 GROUP_IDS_COMMAND = ["id", "-G", "{username}"]
 # Command that takes a username as a single argument and returns the primary group"
 PRIMARY_GROUP_COMMAND = ["id", "-gn", "{username}"]
+UMASK = 0o002
+CHMOD = 0o664
 
-with open(os.path.join(script_path, "config.yaml")) as c:
+with open(script_path / "config.yaml") as c:
     try:
         config = yaml.load(c)
     except ScannerError:
@@ -58,6 +61,8 @@ def main():
     parser.add_argument("--log", default=None)
 
     # permission related settings
+    parser.add_argument("--group_readonly", action="store_true", default=False,
+                        help="chmod 640 on exported files.")
     parser.add_argument("--skip_user_permission_check", action="store_true",
                         default=False, help="Check that the user has read&write permissions to the provided directory.")
     parser.add_argument("--run_with_primary_group", action="store_true",
@@ -84,18 +89,27 @@ def main():
 
     try:
         username = resolve_username(args.username, args.email)
-        logger.debug("Found username: '%s'", username)
+        logger.debug(f"Found username: '{username}'")
         primary_group, groups, group_ids = resolve_groups(username)
-        logger.debug("Found primary group: '%s', group names: '%s' and ids: '%s'",
-                     primary_group, ", ".join(groups), ", ".join(map(str, group_ids)))
+        group_id_str = ", ".join(map(str, group_ids))
+        logger.debug(f"Found primary group: '{primary_group}', group names: '{', '.join(groups)}' and ids: "
+                     f"'{group_id_str}'")
     except KeyError as e:
         logger.exception(e)
-        logger.critical("Cannot find unix username by '%s'. Please contact your Galaxy administrator.", args.email)
+        logger.critical(f"Cannot find unix username by '{args.email}'. Please contact your Galaxy administrator.")
         sys.exit(1)
 
-    if not args.run_with_primary_group:
+    global UMASK
+    global CHMOD
+    if args.group_readonly:
+        UMASK = 0o027
+        CHMOD = 0o640
+    elif not args.run_with_primary_group:
         # ignore umask - we want 0o777
-        os.umask(0)
+        UMASK = 0
+        CHMOD = 0o666  # only affects the metadata file
+        os.umask(UMASK)
+
     copy_datasets(args, username, primary_group, groups, group_ids)
 
 
@@ -129,19 +143,19 @@ def copy_datasets(args, username, primary_group, groups, group_ids):
             "collection": args.collection_name[i]
         }
         metadata = generate_metadata(file_pattern_map, simple_tags, named_tags)
-        logger.debug("Got following metadata:\n%s", json.dumps(metadata))
+        logger.debug(f"Got following metadata:\n{json.dumps(metadata)}")
         new_path, pattern_found = resolve_path(args, file_pattern_map, groups, named_tags)
         if os.path.exists(new_path):
-            logger.critical("Path '%s' already existing, we will not overwrite this file. Change the destination or "
-                            "(re)move the existing file.", new_path)
+            logger.critical(f"Path '{new_path}' already existing, we will not overwrite this file. "
+                            f"Change the destination or (re)move the existing file.")
             sys.exit(1)
 
         if create_path(args, new_path, pattern_found, username, primary_group, group_ids):
-            metadata_path = new_path + ".info"
+            metadata_path = f"{new_path}.info"
             if args.dry_run:
-                logger.debug("Would have copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+                logger.debug(f"Would have copied: '{dataset}' ({file_pattern_map['name']}) -> '{new_path}'.")
                 if args.export_metadata:
-                    logger.debug("Would have exported the metadata to %s", metadata_path)
+                    logger.debug(f"Would have exported the metadata to {metadata_path}")
             else:
                 copy_dataset(args, dataset, args.dataset_extra_files[i], file_pattern_map, metadata, metadata_path,
                              new_path, primary_group)
@@ -156,34 +170,38 @@ def copy_dataset(args, dataset, dataset_extra_files, file_pattern_map, metadata,
         # do the actual copy
         run_command(["cp", "--no-preserve", "mode", dataset, new_path], {}, "Copying dataset with '%s'",
                     raise_exception=True, sg_group=primary_group, args=args)
-        logger.info("Copied: '%s' (%s) -> '%s'.", dataset, file_pattern_map["name"], new_path)
+        logger.info(f"Copied: '{dataset}' ({file_pattern_map['name']}) -> '{new_path}'.")
         if args.copy_extra_files and os.path.exists(dataset_extra_files):
-            new_extra_path = new_path + "_files"
-            logger.info("Will try to copy extra files to '%s'", new_extra_path)
+            new_extra_path = f"{new_path}_files"
+            logger.info(f"Will try to copy extra files to '{new_extra_path}'")
             run_command(["cp", "-r", "--no-preserve", "mode", dataset_extra_files, new_extra_path],
                         {}, "Copying extra datasets with '%s'", raise_exception=True,
                         sg_group=primary_group, args=args)
     except OSError as e:
         handle_oserror(args, e, new_path)
     except Exception as e:
-        logger.exception("Cannot copy file '%s' -> '%s'.", dataset, new_path)
+        logger.exception(f"Cannot copy file '{dataset}' -> '{new_path}'.")
         sys.exit(1)
 
     if args.export_metadata:
-        with open(metadata_path, "w") as info:
+        logger.debug(f"Exporting metadata with chmod: {CHMOD}")
+        os.umask(0)
+        # stat.S_IRWXU | stat.S_IRWXO
+        with open(os.open(metadata_path, os.O_CREAT | os.O_WRONLY, CHMOD), "w") as info:
             json.dump(metadata, info, indent=2)
-        logger.info("Exported the metadata to %s", metadata_path)
+        logger.info(f"Exported the metadata to {metadata_path}")
 
 
 def handle_oserror(args, e, new_path):
     if e.errno == 13:
         msg = "Galaxy cannot copy the file to the destination path. Please make sure the galaxy user has write " \
               "permission on the given path. "
+        dirname = os.path.dirname(new_path)
         if args.run_with_primary_group:
-            msg += "`chmod g+w %s` might just do the trick."
+            msg += f"`chmod g+w {dirname}` might just do the trick."
         else:
-            msg += "`chmod og+w %s` might be needed!"
-        logger.critical(msg, os.path.dirname(new_path))
+            msg += f"`chmod og+w {dirname}` might be needed!"
+        logger.critical(msg)
     else:
         logger.critical(e)
     sys.exit(1)
@@ -195,7 +213,8 @@ def resolve_username(username, email):
 
 def subprocess_umask():
     os.setpgrp()
-    os.umask(0o002)
+    os.umask(UMASK)
+    logger.debug(f"Current umask: {UMASK}")
 
 
 def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=None, args=None):
@@ -203,10 +222,10 @@ def run_command(command_list, format_dict, msg, raise_exception=False, sg_group=
     for cmd_part in command_list:
         cmd.append(cmd_part.format(**format_dict))
     logger.debug(msg, cmd)
-    subprocess_kwargs = {}
+    subprocess_kwargs = {"preexec_fn": subprocess_umask, "encoding": "utf-8"}
     if sg_group and args and args.run_with_primary_group:
         # sg - group -c 'cmd'
-        subprocess_kwargs = {"shell": True, "preexec_fn": subprocess_umask}
+        subprocess_kwargs["shell"] = True
         cmd = "sg - {} -c '{}'".format(sg_group, " ".join(cmd))
     try:
         return subprocess.check_output(cmd, **subprocess_kwargs).strip()
@@ -237,13 +256,13 @@ def resolve_groups(username):
 def user_can_write_dir(directory, username, group_ids):
     pwd_user = pwd.getpwnam(username)
     stat_info = os.stat(directory)
-    logger.debug("Directory '%s' permissions: '%s' (%s)", directory, oct(stat_info.st_mode), stat_info.st_mode)
-    logger.debug("Directory owned by user id: %s", stat_info.st_uid)
-    logger.debug("Directory owned by group: %s", stat_info.st_gid)
-    logger.debug("Directory group id in user group ids: %s", stat_info.st_gid in group_ids)
-    logger.debug("Directory writable by owner: %s", stat_info.st_mode & stat.S_IWUSR)
-    logger.debug("Directory writable by group: %s", stat_info.st_mode & stat.S_IWGRP)
-    logger.debug("Directory writable by others: %s", stat_info.st_mode & stat.S_IWOTH)
+    logger.debug(f"Directory '{directory}' permissions: '{oct(stat_info.st_mode)}' ({stat_info.st_mode})")
+    logger.debug(f"Directory owned by user id: {stat_info.st_uid}")
+    logger.debug(f"Directory owned by group: {stat_info.st_gid}")
+    logger.debug(f"Directory group id in user group ids: {stat_info.st_gid in group_ids}")
+    logger.debug(f"Directory writable by owner: {stat_info.st_mode & stat.S_IWUSR}")
+    logger.debug(f"Directory writable by group: {stat_info.st_mode & stat.S_IWGRP}")
+    logger.debug(f"Directory writable by others: {stat_info.st_mode & stat.S_IWOTH}")
     return (stat_info.st_uid == pwd_user.pw_uid and stat_info.st_mode & stat.S_IWUSR) or \
            (stat_info.st_gid in group_ids and stat_info.st_mode & stat.S_IWGRP) or \
            (stat_info.st_mode & stat.S_IWOTH)
@@ -263,10 +282,10 @@ def check_permission(path, pattern_found, username, group_ids):
     If /g/furlong/scholtal is also not existing, the user needs to have write permissions on /g/furlong
     as that is the value of `pattern_found`
     """
-    logger.info("Checking directory: %s", path)
+    logger.info(f"Checking directory: {path}")
     if os.path.exists(path):
         user_can_write_dir_out = user_can_write_dir(path, username, group_ids)
-        logger.info("Permission check out: %s", user_can_write_dir_out)
+        logger.info(f"Permission check out: {user_can_write_dir_out}")
         if user_can_write_dir_out:
             logger.info("Directory is writable by the user.")
             return True
@@ -277,7 +296,7 @@ def check_permission(path, pattern_found, username, group_ids):
         # the root directory - i.e. the required pattern does not exist yet, we will not create this
         logger.debug("Maximum parent reached, will not traverse further.")
         return False
-    logger.debug("Path not yet existing: '%s'", path)
+    logger.debug(f"Path not yet existing: '{path}'")
     # if not yet existing, then check the parent directory till we find an existing one
     parent_directory = os.path.dirname(path)
     return check_permission(parent_directory, pattern_found, username, group_ids)
@@ -297,19 +316,19 @@ def create_path(args, path, pattern_found, username, primary_group, group_ids, c
         can_write = check_permission(directory_path, pattern_found, username, group_ids)
     if can_write and not dir_exists:
         if args.dry_run:
-            logger.info("Would have created directory: '%s'", directory_path)
+            logger.info("Would have created directory: '{directory_path}'")
         else:
             try:
-                logger.info("Creating directory: '%s'", directory_path)
+                logger.info("Creating directory: '{directory_path}'")
                 run_command(["mkdir", "-p", directory_path], {}, "Creating directory: '%s'", raise_exception=True,
                             sg_group=primary_group, args=args)
             except subprocess.CalledProcessError as e:
-                msg = "Galaxy cannot create the directory path. Please make sure the galaxy user has write permission on the given path. "
+                msg = "Galaxy cannot create the directory path. Please make sure the galaxy user has write permission" \
+                      " on the given path. "
                 if args.run_with_primary_group:
-                    msg += "`chmod g+w %s` might just do the trick."
+                    msg += f"`chmod g+w {directory_path}` might just do the trick."
                 else:
-                    msg += "`chmod og+w %s` might be needed!"
-                logger.critical(msg, directory_path)
+                    msg += f"`chmod og+w {directory_path}` might be needed!"
 
                 sys.exit(1)
     return can_write
@@ -344,15 +363,15 @@ def string_replace_named_tags(file_pattern, named_tags):
         try:
             file_pattern = re.sub(match.group(0), named_tags[tag_name], file_pattern)
         except KeyError:
-            logger.critical("Could not find named tag '%s' mentioned in pattern on dataset, dataset only has the "
-                            "following tags:\n%s", tag_name, ", ".join(named_tags.keys()))
+            logger.critical(f"Could not find named tag '{tag_name}' mentioned in pattern on dataset, "
+                            f"dataset only has the following tags:\n{', '.join(named_tags.keys())}")
             sys.exit(1)
     return file_pattern
 
 
 def resolve_path(args, file_pattern_map, groups, named_tags):
     file_pattern = args.file_pattern
-    logger.info("Got file pattern: %s", file_pattern)
+    logger.info(f"Got file pattern: {file_pattern}")
     pattern_found = None
     if not args.skip_user_permission_check:
         # for each group a different pattern map
@@ -370,8 +389,8 @@ def resolve_path(args, file_pattern_map, groups, named_tags):
                         pattern_found = pattern
                         break
         if not pattern_found:
-            logger.critical("Given file pattern does not match the required path prefix e.g.\n%s.",
-                            ", ".join(config['required_path_patterns']))
+            logger.critical(f"Given file pattern does not match the required path prefix e.g.\n"
+                            f"{', '.join(config['required_path_patterns'])}.")
             sys.exit(1)
     else:
         pattern_found = file_pattern
@@ -383,21 +402,21 @@ def resolve_path(args, file_pattern_map, groups, named_tags):
     try:
         new_path_mapped = file_pattern.format(**file_pattern_map)
     except KeyError as e:
-        logger.critical("Given file pattern cannot be resolved. Cannot match '{%s}'", e.args[0])
+        logger.critical(f"Given file pattern cannot be resolved. Cannot match '{e.args[0]}'")
         sys.exit(1)
     except ValueError as e:
-        logger.critical("Given file pattern cannot be resolved. '%s'", e)
+        logger.critical("Given file pattern cannot be resolved. '{e}'")
         sys.exit(1)
 
     pattern_found = string_replace_named_tags(pattern_found, named_tags)
     pattern_found = pattern_found.format(**file_pattern_map)
 
-    logger.debug("Make given file path '%s' valid", new_path_mapped)
+    logger.debug(f"Make given file path '{new_path_mapped}' valid")
     new_path_mapped = get_valid_filepath(new_path_mapped)
 
-    logger.debug("Constructed new path: '%s'", new_path_mapped)
+    logger.debug("Constructed new path: '{new_path_mapped}'")
     new_path = os.path.realpath(new_path_mapped)
-    logger.info("Resolved new path: '%s'", new_path_mapped)
+    logger.info("Resolved new path: '{new_path_mapped}'")
     return new_path, pattern_found
 
 

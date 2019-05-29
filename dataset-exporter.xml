@@ -1,6 +1,8 @@
-<tool id="dataset-exporter" name="Dataset Exporter" version="0.6.0" profile="18.01">
+<tool id="dataset-exporter" name="Dataset Exporter" version="0.7.0" profile="18.01">
     <description>- transfer datasets to network shares</description>
     <requirements>
+        <requirement type="package" version="3.7">python</requirement>
+        <requirement type="package">pyyaml</requirement>
     </requirements>
     <macros>
         <import>predefined_export_paths.xml</import>
@@ -84,6 +86,12 @@
                     --copy_extra_files
                 #end if
             #end if
+            #if $options.export_metadata:
+                --export_metadata
+            #end if
+            #if $group_readonly:
+                --group_readonly
+            #end if
             --log '$log'
             #if $is_admin:
                 --skip_user_permission_check
@@ -93,9 +101,6 @@
             #end if
             #if $primary_group:
                 --run_with_primary_group
-            #end if
-            #if $export_metadata:
-                --export_metadata
             #end if
 
     ]]></command>
@@ -124,12 +129,16 @@
                        label="Also copy extra files belonging to this dataset"
                        help="This will create a directory (File Pattern + '_files') and copy all files there.
                        Generally only needed for html reports that do not include all the images"/>
+                <param name="export_metadata" type="boolean" label="Export a metadata file for every dataset"
+                       checked="false"
+                       help="File will be named {dataset}.info next to the exported dataset."/>
             </when>
         </conditional>
-        <param name="primary_group" type="boolean" label="Try to create directory and files with your primary group" checked="true"
-               help="Generally this is the recommend option. If you uncheck this, galaxy will export files with the permissive 777."/>
-        <param name="export_metadata" type="boolean" label="Export a metadata file for every dataset" checked="false"
-               help="File will be named {dataset}.info next to the exported dataset."/>
+        <param name="primary_group" type="boolean" label="Try to create directory and files with your primary group"
+               checked="true"
+               help="Generally this is the recommend option. If you uncheck this, by default galaxy will export files with the permissive 777."/>
+        <param name="group_readonly" type="boolean" label="Export files with 640 permissions." checked="false"
+               help="If set to true, exported file permissions will be set to 640, i.e. readonly by owner(galaxy) and group."/>
         <param name="dry_run" type="boolean" label="Only do a dry run" checked="false"
                help="No directories will be created or files written! Very useful to find the right pattern!"/>
     </inputs>
