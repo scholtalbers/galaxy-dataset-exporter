@@ -248,7 +248,7 @@ def resolve_groups(username):
     groups_out = run_command(GROUPS_COMMAND, {"username": username}, "Getting groups with: '%s'")
     groups = groups_out.split(" ")
     group_ids_out = run_command(GROUP_IDS_COMMAND, {"username": username}, "Getting group ids with '%s'")
-    group_ids = map(int, group_ids_out.split(" "))
+    group_ids = list(map(int, group_ids_out.split(" ")))
     return primary_group, groups, group_ids
 
 
